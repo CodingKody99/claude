@@ -26,6 +26,9 @@ jobs:
       - name: Gradle einrichten
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Migrationen prüfen
+        run: python3 tools/check_migrations.py
+
       - name: Unit-Tests
         run: ./gradlew --no-daemon testDebugUnitTest
 

@@ -252,6 +252,24 @@ Reine JVM-Unit-Tests, kein Emulator nötig:
 ./gradlew testDebugUnitTest
 ```
 
+Dazu ein Prüfskript für die Datenbank-Migrationen:
+
+```bash
+python3 tools/check_migrations.py
+```
+
+Es nimmt eine Datenbank in jedem je ausgelieferten Zustand, füllt sie mit Daten,
+spielt alle Migrationen darüber und vergleicht das Ergebnis mit dem Schema, das
+die Entities verlangen. Der Grund: Room prüft beim ersten Start nach einem Update,
+ob die Datenbank auf dem Gerät zu seinen Entities passt — und wenn nicht, stürzt
+die App ab, mit den Listen darin. Rooms eigener Migrations-Test bräuchte dafür
+einen Emulator; das Skript baut die Kette in reinem SQLite nach und läuft deshalb
+in CI mit.
+
+Es prüft außerdem sich selbst: kommt in `AppDatabase.kt` eine Migration oder eine
+Anweisung dazu, die im Skript fehlt, schlägt es fehl, statt stillschweigend
+weniger zu testen als es behauptet.
+
 Abgedeckt sind unter anderem:
 
 - **Normalisierung**: Umlaute, Schreibweisen, deutsche Pluralformen
