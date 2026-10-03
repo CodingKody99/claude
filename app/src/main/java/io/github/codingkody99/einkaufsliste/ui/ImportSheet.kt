@@ -61,6 +61,7 @@ fun ImportSheet(
     onSelectAll: (Boolean) -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
+    onDictated: (String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -92,6 +93,7 @@ fun ImportSheet(
                     onTextChange = onTextChange,
                     onAnalyze = onAnalyze,
                     onLoadRecipe = onLoadRecipe,
+                    onDictated = onDictated,
                     onDismiss = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
@@ -118,6 +120,7 @@ private fun TextStep(
     onTextChange: (String) -> Unit,
     onAnalyze: () -> Unit,
     onLoadRecipe: () -> Unit,
+    onDictated: (String) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -133,7 +136,8 @@ private fun TextStep(
                 Text(
                     text = "https://www.chefkoch.de/rezepte/…\n\n" +
                         "oder:\n" +
-                        "Salat mit Käse\n2 Tomaten\nFeta\n500g Hackfleisch",
+                        "Salat mit Käse\n2 Tomaten\nFeta\n500g Hackfleisch\n\n" +
+                        "oder auf 🎤 tippen und es einfach sagen",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -150,7 +154,12 @@ private fun TextStep(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
+
+        if (!state.loading) {
+            DictateButton(onText = onDictated)
+            Spacer(Modifier.height(12.dp))
+        }
 
         if (state.loading) {
             Row(verticalAlignment = Alignment.CenterVertically) {

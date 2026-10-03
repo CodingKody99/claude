@@ -4,6 +4,7 @@ import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.FakeCategoryOverrideDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingDao
 import io.github.codingkody99.einkaufsliste.data.NewItem
+import io.github.codingkody99.einkaufsliste.data.FakeRecipeDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingListDao
 import io.github.codingkody99.einkaufsliste.data.RoomShoppingRepository
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
@@ -34,8 +35,9 @@ class ShoppingListViewModelTest {
     private val dao = FakeShoppingDao()
     private val overrideDao = FakeCategoryOverrideDao()
     private val listDao = FakeShoppingListDao()
+    private val recipeDao = FakeRecipeDao()
     private var clock = 0L
-    private val repository = RoomShoppingRepository(dao, overrideDao, listDao) { ++clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao) { ++clock }
 
     private val listId = ShoppingList.DEFAULT_ID
 

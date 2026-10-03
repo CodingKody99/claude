@@ -110,6 +110,65 @@ class ShoppingListParserTest {
     }
 
     @Test
+    fun `a dictated sentence becomes the dish plus its ingredients`() {
+        val spoken = "Ich will Sommerrollen kochen, dafür brauche ich Reisnudeln, " +
+            "Karotte, Gurke, Tofu"
+        val parsed = parser.parse(spoken)
+
+        assertEquals("Sommerrollen", parsed.single { it.isHeading }.name)
+        assertEquals(
+            listOf("Reisnudeln", "Karotte", "Gurke", "Tofu"),
+            parsed.filterNot { it.isHeading }.map { it.name },
+        )
+    }
+
+    @Test
+    fun `conversational lead-ins are stripped`() {
+        assertEquals(listOf("Milch"), names("ich brauche Milch"))
+        assertEquals(listOf("Milch"), names("und dann brauche ich noch Milch"))
+        assertEquals(listOf("Brot"), names("außerdem bitte Brot"))
+        assertEquals(listOf("Käse"), names("hol noch Käse"))
+        assertEquals(listOf("Tomaten"), names("dazu Tomaten"))
+    }
+
+    @Test
+    fun `a lead-in does not swallow the amount`() {
+        val entry = items("dafür brauche ich 2 Karotten").single()
+        assertEquals("Karotten", entry.name)
+        assertEquals("2", entry.quantity)
+    }
+
+    @Test
+    fun `a dish sentence needs a cooking verb`() {
+        // Otherwise "ich will Milch" would be filed as a dish instead of milk.
+        val entry = items("ich will Milch").single()
+        assertEquals("Milch", entry.name)
+        assertEquals(MOLKEREI, entry.category)
+    }
+
+    @Test
+    fun `other dish phrasings are recognised`() {
+        assertEquals("Lasagne", parser.parse("wir kochen heute Lasagne").single().name)
+        assertEquals("Pfannkuchen", parser.parse("ich backe Pfannkuchen").single().name)
+        assertEquals("Salat", parser.parse("für Salat brauche ich").single().name)
+        assertTrue(parser.parse("wir kochen heute Lasagne").single().isHeading)
+    }
+
+    @Test
+    fun `item names are not mistaken for lead-ins`() {
+        assertEquals(listOf("Brauner Zucker"), names("Brauner Zucker"))
+        assertEquals(listOf("Bratwurst"), names("Bratwurst"))
+        assertEquals(listOf("Nougat"), names("Nougat"))
+        assertEquals(listOf("Dill"), names("Dill"))
+    }
+
+    @Test
+    fun `a sentence that is only filler disappears`() {
+        assertTrue(parser.parse("ich brauche").isEmpty())
+        assertTrue(parser.parse("und dann noch").isEmpty())
+    }
+
+    @Test
     fun `every item is filed into its supermarket section`() {
         val parsed = items("Tomaten\nBrot\nMilch\nHackfleisch\nNudeln")
         assertEquals(

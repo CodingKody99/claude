@@ -11,6 +11,13 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   zerlegt ihn in einzelne Artikel, erkennt Mengen und sortiert alles nach
   Supermarkt-Reihenfolge. Vor dem Übernehmen gibt es eine **Vorschau**, in der jede
   Zeile abgewählt oder umsortiert werden kann.
+- **Diktieren**: statt zu tippen einfach sagen, was gebraucht wird — „Ich will
+  Sommerrollen kochen, dafür brauche ich Reisnudeln, Karotte, Gurke, Tofu" wird zum
+  Gericht als Überschrift plus vier einsortierten Artikeln. Satzfüller wie „dafür
+  brauche ich" fallen dabei weg
+- **Rezeptbuch** über das 🍳-Symbol oben: Rezepte eintippen, per Link laden oder
+  diktieren und speichern. Ein Tipp auf ein Rezept öffnet die Zutaten in derselben
+  Vorschau wie der Freitext-Import — von dort gehen sie auf die aktuelle Liste
 - **Rezept-Link einfügen**: statt Text einen Link zu einer Rezeptseite einwerfen —
   die Zutatenliste wird geladen und läuft durch dieselbe Erkennung und dieselbe
   Vorschau. Rezeptangaben wie „3 Ei(er)", „etwas Butter zum Braten" oder
@@ -33,8 +40,6 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
 - **Schnelleingabe unten**: das Feld ist immer da — antippen, Artikel eintippen,
   Enter. Die erkannte Kategorie steht darüber; ein Tipp darauf öffnet Menge und
   Kategorie
-- **Größere Schrift** als der Material-Standard, zusätzlich zur Systemeinstellung,
-  mit kräftigeren Artikelnamen und großzügigeren Zeilen
 - **Alles lokal** in einer Room-Datenbank
 
 ### Wie aus Freitext eine sortierte Liste wird
@@ -136,9 +141,10 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── Category.kt               Kategorien; Reihenfolge = Route im Supermarkt
 │   ├── ShoppingItem.kt           gehört zu genau einer Liste
 │   ├── ShoppingList.kt           die Listen selbst
+│   ├── Recipe.kt                 gespeicherte Rezepte
 │   ├── CategoryOverride.kt       gelernte Korrekturen
-│   ├── ShoppingDao.kt / ShoppingListDao.kt / CategoryOverrideDao.kt
-│   ├── AppDatabase.kt            v3, mit Migrationen für Lerntabelle und Listen
+│   ├── ShoppingDao.kt / ShoppingListDao.kt / RecipeDao.kt / CategoryOverrideDao.kt
+│   ├── AppDatabase.kt            v4, mit Migrationen für Lernen, Listen, Rezepte
 │   └── ShoppingRepository.kt     Interface + Room-Implementierung
 │   └── RecipeFetcher.kt          lädt eine Rezeptseite (nur HttpURLConnection)
 ├── domain/                       reines Kotlin, ohne Android und ohne Room
@@ -158,9 +164,12 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
     ├── ShoppingListViewModelFactory.kt
     ├── ShoppingListScreen.kt     Liste, Einfügefeld oben, Schnelleingabe unten
     ├── ListSwitcherSheet.kt      Listen wechseln, anlegen, umbenennen
+    ├── RecipesSheet.kt           gespeicherte Rezepte
+    ├── RecipeEditorSheet.kt      Rezept eintippen, laden oder diktieren
+    ├── DictateButton.kt          Spracheingabe über den System-Erkenner
     ├── ImportSheet.kt            Einfügen und Vorschau
     ├── ItemEditorSheet.kt
-    └── theme/                    Farben und die vergrößerte Typografie
+    └── theme/                    Farben und Typografie
 ```
 
 Alles, was Entscheidungen trifft — Normalisierung, Lexikon, Zuordnung, Mengen,
@@ -195,6 +204,13 @@ Abgedeckt sind unter anderem:
   Liste nicht gelöscht werden kann
 - **Schnelleingabe**: Kategorie beim Tippen, Hinzufügen und Leeren des Felds,
   Übergabe des Getippten an den vollen Editor
+- **Gesprochene Sätze**: Satzfüller („und dann brauche ich noch"), Gericht-Sätze
+  („ich will X kochen" gegen „ich will Milch"), Mengen in gesprochener Form, und
+  dass Artikelnamen wie „Brauner Zucker" nicht für Füllwörter gehalten werden
+- **Rezeptbuch**: Speichern, Bearbeiten, Löschen, Laden aus einem Link,
+  Diktieren mit Name aus dem Gericht, Übernahme auf die Liste samt
+  Duplikatprüfung — und dass ein Rezept bei jeder Nutzung neu eingeordnet wird,
+  also von später Gelerntem profitiert
 - **Rezept-Links**: Linkerkennung im eingefügten Text, Zutaten aus JSON-LD
   (auch verschachtelt in `@graph`, `@type` als Liste, Zutat als einzelner String),
   Microdata-Rückfall, defektes JSON, Seite ohne Rezept, Ladefehler — und ein
@@ -212,4 +228,4 @@ Abgedeckt sind unter anderem:
 | JSON | kotlinx.serialization 1.7.3 (nur Laufzeit, kein Compiler-Plugin) |
 | Build | Gradle 8.9, Android Gradle Plugin 8.5.2, JDK 17 |
 | minSdk / targetSdk | 26 / 34 |
-| Schriftgrößen | Material-3-Skala, um 2–4 sp erhöht; Systemskalierung gilt zusätzlich |
+| Spracheingabe | `RecognizerIntent` des Systems, ohne Mikrofon-Berechtigung |

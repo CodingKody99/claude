@@ -56,6 +56,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,6 +83,9 @@ fun ShoppingListRoute(
     val quickAdd by viewModel.quickAdd.collectAsStateWithLifecycle()
     val editor by viewModel.editor.collectAsStateWithLifecycle()
     val importState by viewModel.import.collectAsStateWithLifecycle()
+    val recipes by viewModel.recipes.collectAsStateWithLifecycle()
+    val recipesVisible by viewModel.recipesVisible.collectAsStateWithLifecycle()
+    val recipeEditor by viewModel.recipeEditor.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     NoticeSnackbarEffect(
@@ -95,6 +100,7 @@ fun ShoppingListRoute(
         quickAdd = quickAdd,
         snackbarHostState = snackbarHostState,
         onTitleClick = viewModel::openSwitcher,
+        onRecipesClick = viewModel::openRecipes,
         onPasteClick = viewModel::openImport,
         onQuickAddChange = viewModel::onQuickAddChange,
         onQuickAddSubmit = viewModel::submitQuickAdd,
@@ -148,6 +154,30 @@ fun ShoppingListRoute(
             onSelectAll = viewModel::setAllImportRowsSelected,
             onApply = viewModel::applyImport,
             onDismiss = viewModel::dismissImport,
+            onDictated = viewModel::onImportDictated,
+        )
+    }
+
+    if (recipesVisible) {
+        RecipesSheet(
+            recipes = recipes,
+            onUse = viewModel::useRecipe,
+            onCreate = viewModel::startCreateRecipe,
+            onEdit = viewModel::startEditRecipe,
+            onDelete = viewModel::deleteRecipe,
+            onDismiss = viewModel::dismissRecipes,
+        )
+    }
+
+    if (recipeEditor.visible) {
+        RecipeEditorSheet(
+            state = recipeEditor,
+            onNameChange = viewModel::onRecipeNameChange,
+            onIngredientsChange = viewModel::onRecipeIngredientsChange,
+            onDictated = viewModel::onRecipeDictated,
+            onLoadLink = viewModel::loadRecipeIntoEditor,
+            onSave = viewModel::saveRecipe,
+            onDismiss = viewModel::dismissRecipeEditor,
         )
     }
 }
@@ -160,6 +190,7 @@ fun ShoppingListScreen(
     quickAdd: QuickAddState,
     snackbarHostState: SnackbarHostState,
     onTitleClick: () -> Unit,
+    onRecipesClick: () -> Unit,
     onPasteClick: () -> Unit,
     onQuickAddChange: (String) -> Unit,
     onQuickAddSubmit: () -> Unit,
@@ -190,11 +221,18 @@ fun ShoppingListScreen(
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = "Liste wechseln",
-                            modifier = Modifier.size(28.dp),
                         )
                     }
                 },
                 actions = {
+                    // A second door, next to the list name, in the same spirit:
+                    // one tap away and otherwise out of the way.
+                    IconButton(
+                        onClick = onRecipesClick,
+                        modifier = Modifier.semantics { contentDescription = "Rezepte" },
+                    ) {
+                        Text("🍳", style = MaterialTheme.typography.titleMedium)
+                    }
                     ListMenu(
                         checkedCount = uiState.checkedCount,
                         totalCount = uiState.openCount + uiState.checkedCount,
@@ -353,16 +391,8 @@ private fun QuickAddBar(
                     keyboardActions = KeyboardActions(onDone = { if (state.canAdd) onSubmit() }),
                 )
                 Spacer(Modifier.width(8.dp))
-                FilledIconButton(
-                    onClick = onSubmit,
-                    enabled = state.canAdd,
-                    modifier = Modifier.size(52.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Artikel hinzufügen",
-                        modifier = Modifier.size(28.dp),
-                    )
+                FilledIconButton(onClick = onSubmit, enabled = state.canAdd) {
+                    Icon(Icons.Default.Add, contentDescription = "Artikel hinzufügen")
                 }
             }
         }
@@ -389,7 +419,6 @@ private fun PasteField(onClick: () -> Unit) {
                 imageVector = Icons.Default.List,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(12.dp))
             Column {
@@ -424,11 +453,7 @@ private fun ListMenu(
     var expanded by remember { mutableStateOf(false) }
 
     IconButton(onClick = { expanded = true }) {
-        Icon(
-            Icons.Default.MoreVert,
-            contentDescription = "Weitere Aktionen",
-            modifier = Modifier.size(28.dp),
-        )
+        Icon(Icons.Default.MoreVert, contentDescription = "Weitere Aktionen")
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         DropdownMenuItem(
@@ -457,7 +482,7 @@ private fun SectionHeader(title: String, trailing: String) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
+                    .padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -497,7 +522,7 @@ private fun ItemRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onClick)
-                .padding(vertical = 18.dp),
+                .padding(vertical = 14.dp),
         ) {
             Text(
                 text = item.name,
@@ -525,7 +550,6 @@ private fun ItemRow(
                 Icons.Default.Delete,
                 contentDescription = "„${item.name}“ löschen",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(26.dp),
             )
         }
     }
@@ -541,12 +565,12 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Default.ShoppingCart,
             contentDescription = null,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(16.dp))
         Text(text = "Liste ist leer", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             text = "Unten einen Artikel eintippen, oder oben eine ganze Liste einfügen.",
             style = MaterialTheme.typography.bodyMedium,
@@ -595,6 +619,7 @@ private fun ShoppingListScreenPreview() {
             quickAdd = QuickAddState(text = "Milch", suggested = Category.MOLKEREI, recognized = true),
             snackbarHostState = remember { SnackbarHostState() },
             onTitleClick = {},
+            onRecipesClick = {},
             onPasteClick = {},
             onQuickAddChange = {},
             onQuickAddSubmit = {},

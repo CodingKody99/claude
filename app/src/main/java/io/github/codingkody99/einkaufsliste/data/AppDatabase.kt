@@ -9,8 +9,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ShoppingItem::class, CategoryOverride::class, ShoppingList::class],
-    version = 3,
+    entities = [ShoppingItem::class, CategoryOverride::class, ShoppingList::class, Recipe::class],
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -21,6 +21,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryOverrideDao(): CategoryOverrideDao
 
     abstract fun shoppingListDao(): ShoppingListDao
+
+    abstract fun recipeDao(): RecipeDao
 
     companion object {
         private const val NAME = "einkaufsliste.db"
@@ -67,6 +69,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds saved recipes. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `recipes` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`source_url` TEXT, " +
+                        "`ingredients_text` TEXT NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         /** A fresh install has no migration to seed the first list, so do it here. */
         private val seedFirstList = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -88,7 +104,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .addCallback(seedFirstList)
                     .build()
                     .also { instance = it }

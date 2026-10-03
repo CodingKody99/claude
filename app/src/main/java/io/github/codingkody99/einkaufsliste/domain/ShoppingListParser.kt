@@ -99,14 +99,40 @@ class ShoppingListParser(
     ): ParsedEntry? {
         val cleaned = stripMarkers(fragment.trim())
         if (cleaned.isEmpty()) return null
-        // "500 g" or "2 x" on its own carries no item.
-        if (QuantityParser.isPureQuantity(cleaned)) return null
 
-        val (quantity, remainder) = QuantityParser.split(cleaned)
+        // "Ich will Sommerrollen kochen" names the dish, not something to buy.
+        dishName(cleaned)?.let { dish ->
+            return entry(cleanName(dish), "", sourceLine, overrides, heading = true)
+        }
+
+        // Spoken input carries the sentence around the item: strip it before the
+        // amount is read, or "dafür brauche ich 2 Karotten" hides its own "2".
+        val spoken = stripSpokenFiller(cleaned)
+        if (spoken.isEmpty()) return null
+        // "500 g" or "2 x" on its own carries no item.
+        if (QuantityParser.isPureQuantity(spoken)) return null
+
+        val (quantity, remainder) = QuantityParser.split(spoken)
         val name = cleanName(remainder)
         if (name.none { it.isLetter() }) return null
 
         return entry(name, quantity, sourceLine, overrides, heading = false)
+    }
+
+    /** The dish in "ich will X kochen" / "wir machen heute X", if that is the shape. */
+    private fun dishName(text: String): String? = DISH_SENTENCES
+        .firstNotNullOfOrNull { it.find(text)?.groupValues?.get(1) }
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
+    /** Removes conversational lead-ins, however many are stacked up. */
+    private fun stripSpokenFiller(text: String): String {
+        var current = text
+        while (true) {
+            val stripped = SPOKEN_PREFIX.replace(current, "").trim()
+            if (stripped == current) return current
+            current = stripped
+        }
     }
 
     private fun entry(
@@ -190,6 +216,42 @@ class ShoppingListParser(
         )
         val TRIM_CHARS = charArrayOf(
             ' ', ',', ';', '.', '-', '–', ':', '!', '?', '*', '•', '%', '(', ')',
+        )
+
+        /**
+         * Sentences that announce a dish. The cooking verb is required, so
+         * "ich will Milch" stays an item while "ich will Suppe kochen" does not.
+         */
+        val DISH_SENTENCES = listOf(
+            Regex(
+                "^(?:ich|wir)\\s+(?:will|wollen|möchte|möchten|werde|werden)\\s+(.+?)\\s+" +
+                    "(?:kochen|machen|backen|zubereiten|grillen|braten)$",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                "^(?:ich|wir)\\s+(?:koche|kochen|backe|backen|mache|machen|grille|grillen)\\s+" +
+                    "(?:heute|morgen|gleich|nachher)?\\s*(.+?)$",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                "^für\\s+(.+?)\\s+(?:brauche|brauchen|benötige|benötigen)\\s+(?:ich|wir)$",
+                RegexOption.IGNORE_CASE,
+            ),
+        )
+
+        /**
+         * Lead-ins that dictation produces around the actual items. Applied
+         * repeatedly, so "und dann brauche ich noch Milch" peels down to "Milch".
+         */
+        val SPOKEN_PREFIX = Regex(
+            "^(?:" +
+                "und|dann|danach|außerdem|ausserdem|auch|noch|bitte|also|dafür|dazu|ach ja|ach" +
+                "|ich|wir" +
+                "|brauche|brauchen|bräuchte|bräuchten|benötige|benötigen" +
+                "|will|wollen|möchte|möchten|würde|würden|werde|werden|hätte|hätten" +
+                "|kauf|kaufe|kaufen|besorg|besorge|besorgen|hol|hole|holen|nimm|nehme|nehmen" +
+                ")\\b[\\s,]*",
+            RegexOption.IGNORE_CASE,
         )
 
         /**

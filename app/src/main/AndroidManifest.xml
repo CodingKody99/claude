@@ -7,6 +7,17 @@
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      Dictation goes through the system speech recogniser, which asks for the
+      microphone itself. Declaring the intent here lets the app tell whether a
+      recogniser is installed; no RECORD_AUDIO permission is needed.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:name=".EinkaufslisteApplication"
         android:allowBackup="true"

@@ -1,6 +1,7 @@
 package io.github.codingkody99.einkaufsliste.ui
 
 import io.github.codingkody99.einkaufsliste.data.Category
+import io.github.codingkody99.einkaufsliste.data.Recipe
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
 import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.domain.ParsedEntry
@@ -54,6 +55,29 @@ data class QuickAddState(
     val recognized: Boolean = false,
 ) {
     val canAdd: Boolean get() = text.isNotBlank()
+}
+
+/**
+ * The recipe editor, used for both new and existing recipes. Ingredients live
+ * as text so the same field takes typing, pasting, a link and dictation.
+ */
+data class RecipeEditorState(
+    val visible: Boolean = false,
+    val editing: Recipe? = null,
+    val name: String = "",
+    val ingredientsText: String = "",
+    val sourceUrl: String? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
+) {
+    val isEditing: Boolean get() = editing != null
+    val canSave: Boolean get() = name.isNotBlank() && ingredientsText.isNotBlank() && !loading
+
+    /** A link in the ingredients field, which can be loaded instead of typed. */
+    val detectedUrl: String? get() = UrlDetector.firstUrl(ingredientsText)
+
+    val ingredientCount: Int
+        get() = ingredientsText.split('\n').count { it.isNotBlank() }
 }
 
 /** State of the sheet used for both adding and editing a single item. */

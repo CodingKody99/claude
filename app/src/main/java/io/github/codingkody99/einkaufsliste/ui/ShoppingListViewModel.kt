@@ -6,6 +6,7 @@ import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.FetchResult
 import io.github.codingkody99.einkaufsliste.data.HttpRecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.NewItem
+import io.github.codingkody99.einkaufsliste.data.Recipe
 import io.github.codingkody99.einkaufsliste.data.RecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
 import io.github.codingkody99.einkaufsliste.data.ShoppingList
@@ -92,6 +93,15 @@ class ShoppingListViewModel(
     private val overrides: StateFlow<Map<String, Category>> = repository.observeOverrides()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    val recipes: StateFlow<List<Recipe>> = repository.observeRecipes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
+
+    private val _recipesVisible = MutableStateFlow(false)
+    val recipesVisible: StateFlow<Boolean> = _recipesVisible.asStateFlow()
+
+    private val _recipeEditor = MutableStateFlow(RecipeEditorState())
+    val recipeEditor: StateFlow<RecipeEditorState> = _recipeEditor.asStateFlow()
+
     private val _switcher = MutableStateFlow(SwitcherState())
     val switcher: StateFlow<SwitcherState> = _switcher.asStateFlow()
 
@@ -163,6 +173,146 @@ class ShoppingListViewModel(
             }
             emitNotice("Liste „${summary.name}“ gelöscht", undo = null)
         }
+    }
+
+    // --- recipes --------------------------------------------------------------
+
+    fun openRecipes() {
+        _recipesVisible.value = true
+    }
+
+    fun dismissRecipes() {
+        _recipesVisible.value = false
+    }
+
+    fun startCreateRecipe() {
+        _recipeEditor.value = RecipeEditorState(visible = true)
+    }
+
+    fun startEditRecipe(recipe: Recipe) {
+        _recipeEditor.value = RecipeEditorState(
+            visible = true,
+            editing = recipe,
+            name = recipe.name,
+            ingredientsText = recipe.ingredientsText,
+            sourceUrl = recipe.sourceUrl,
+        )
+    }
+
+    fun dismissRecipeEditor() {
+        _recipeEditor.value = RecipeEditorState()
+    }
+
+    fun onRecipeNameChange(value: String) = _recipeEditor.update { it.copy(name = value) }
+
+    fun onRecipeIngredientsChange(value: String) = _recipeEditor.update {
+        it.copy(ingredientsText = value, error = null)
+    }
+
+    /**
+     * Turns a dictated sentence into a recipe: the dish becomes the name and the
+     * rest becomes clean ingredient lines, so "ich will Sommerrollen kochen,
+     * dafür brauche ich Reisnudeln, Karotte" needs no tidying up by hand.
+     */
+    fun onRecipeDictated(spoken: String) {
+        if (spoken.isBlank()) return
+        val entries = parser.parse(spoken, overrides.value)
+        val dish = entries.firstOrNull { it.isHeading }?.name
+        val lines = entries.filterNot { it.isHeading }.map { entry ->
+            listOf(entry.quantity, entry.name).filter { it.isNotBlank() }.joinToString(" ")
+        }
+        _recipeEditor.update { state ->
+            state.copy(
+                name = if (state.name.isBlank() && !dish.isNullOrBlank()) dish else state.name,
+                ingredientsText = appendLines(state.ingredientsText, lines),
+                error = null,
+            )
+        }
+    }
+
+    /** Fills the editor from the link in its ingredients field. */
+    fun loadRecipeIntoEditor() {
+        val state = _recipeEditor.value
+        val url = state.detectedUrl ?: return
+        if (state.loading) return
+        _recipeEditor.update { it.copy(loading = true, error = null) }
+
+        viewModelScope.launch {
+            when (val result = recipeFetcher.fetch(url)) {
+                is FetchResult.Failure ->
+                    _recipeEditor.update { it.copy(loading = false, error = result.reason) }
+
+                is FetchResult.Success -> {
+                    val extracted = recipeExtractor.extract(result.html)
+                    if (extracted == null || extracted.ingredients.isEmpty()) {
+                        _recipeEditor.update {
+                            it.copy(
+                                loading = false,
+                                error = "Auf dieser Seite wurden keine Zutaten gefunden. " +
+                                    "Du kannst sie stattdessen eintippen oder diktieren.",
+                            )
+                        }
+                    } else {
+                        _recipeEditor.update {
+                            it.copy(
+                                loading = false,
+                                name = it.name.ifBlank { extracted.title },
+                                ingredientsText = extracted.ingredients.joinToString("\n"),
+                                sourceUrl = url,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveRecipe() {
+        val state = _recipeEditor.value
+        if (!state.canSave) return
+        val editing = state.editing
+        viewModelScope.launch {
+            if (editing == null) {
+                repository.saveRecipe(state.name, state.ingredientsText, state.sourceUrl)
+                emitNotice("Rezept „${state.name.trim()}“ gespeichert", undo = null)
+            } else {
+                repository.updateRecipe(editing, state.name, state.ingredientsText)
+            }
+        }
+        dismissRecipeEditor()
+    }
+
+    fun deleteRecipe(recipe: Recipe) {
+        viewModelScope.launch {
+            repository.deleteRecipe(recipe.id)
+            emitNotice("Rezept „${recipe.name}“ gelöscht", undo = null)
+        }
+    }
+
+    /**
+     * Opens the import preview filled with a saved recipe, so adding its
+     * ingredients to the list goes through exactly the same check and undo.
+     */
+    fun useRecipe(recipe: Recipe) {
+        dismissRecipes()
+        _import.value = ImportState(visible = true, text = recipe.ingredientsText)
+        viewModelScope.launch {
+            val rows = buildRows(recipe.ingredientsText)
+            _import.update { it.copy(rows = rows, sourceTitle = recipe.name) }
+        }
+    }
+
+    /** Dictated text is appended, so several bursts can be spoken in a row. */
+    fun onImportDictated(spoken: String) {
+        if (spoken.isBlank()) return
+        onImportTextChange(appendLines(_import.value.text, listOf(spoken.trim())))
+    }
+
+    private fun appendLines(existing: String, lines: List<String>): String {
+        val wanted = lines.filter { it.isNotBlank() }
+        if (wanted.isEmpty()) return existing
+        val joined = wanted.joinToString("\n")
+        return if (existing.isBlank()) joined else existing.trimEnd() + "\n" + joined
     }
 
     // --- quick add ------------------------------------------------------------

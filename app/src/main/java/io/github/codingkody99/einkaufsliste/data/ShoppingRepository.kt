@@ -56,6 +56,17 @@ interface ShoppingRepository {
 
     suspend fun clearList(listId: Long)
 
+    // --- recipes --------------------------------------------------------------
+
+    fun observeRecipes(): Flow<List<Recipe>>
+
+    /** Returns the new id, or null when name or ingredients were blank. */
+    suspend fun saveRecipe(name: String, ingredientsText: String, sourceUrl: String?): Long?
+
+    suspend fun updateRecipe(recipe: Recipe, name: String, ingredientsText: String)
+
+    suspend fun deleteRecipe(id: Long)
+
     // --- learned categories ---------------------------------------------------
 
     /** Teaches the app where this name belongs from now on. */
@@ -68,6 +79,7 @@ class RoomShoppingRepository(
     private val dao: ShoppingDao,
     private val overrideDao: CategoryOverrideDao,
     private val listDao: ShoppingListDao,
+    private val recipeDao: RecipeDao,
     private val now: () -> Long = System::currentTimeMillis,
 ) : ShoppingRepository {
 
@@ -158,6 +170,42 @@ class RoomShoppingRepository(
     override suspend fun deleteChecked(listId: Long) = dao.deleteChecked(listId)
 
     override suspend fun clearList(listId: Long) = dao.deleteByList(listId)
+
+    // --- recipes --------------------------------------------------------------
+
+    override fun observeRecipes(): Flow<List<Recipe>> = recipeDao.observeAll()
+
+    override suspend fun saveRecipe(
+        name: String,
+        ingredientsText: String,
+        sourceUrl: String?,
+    ): Long? {
+        val cleanName = name.trim()
+        val lines = cleanLines(ingredientsText)
+        if (cleanName.isEmpty() || lines.isEmpty()) return null
+        return recipeDao.insert(
+            Recipe(
+                name = cleanName,
+                sourceUrl = sourceUrl?.trim()?.takeIf { it.isNotEmpty() },
+                ingredientsText = lines.joinToString("\n"),
+                createdAt = now(),
+            ),
+        )
+    }
+
+    override suspend fun updateRecipe(recipe: Recipe, name: String, ingredientsText: String) {
+        val cleanName = name.trim()
+        val lines = cleanLines(ingredientsText)
+        if (cleanName.isEmpty() || lines.isEmpty()) return
+        recipeDao.update(
+            recipe.copy(name = cleanName, ingredientsText = lines.joinToString("\n")),
+        )
+    }
+
+    override suspend fun deleteRecipe(id: Long) = recipeDao.delete(id)
+
+    private fun cleanLines(text: String): List<String> =
+        text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
 
     // --- learned categories ---------------------------------------------------
 
