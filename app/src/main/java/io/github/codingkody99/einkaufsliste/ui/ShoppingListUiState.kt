@@ -2,6 +2,7 @@ package io.github.codingkody99.einkaufsliste.ui
 
 import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
+import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.domain.ParsedEntry
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListRow
 import io.github.codingkody99.einkaufsliste.domain.UrlDetector
@@ -13,6 +14,46 @@ data class ShoppingListUiState(
     val isLoading: Boolean = true,
 ) {
     val showEmptyState: Boolean get() = !isLoading && rows.isEmpty()
+}
+
+/** One list in the switcher, with how full it is. */
+data class ListSummary(
+    val list: ShoppingList,
+    val openCount: Int,
+    val totalCount: Int,
+    val isCurrent: Boolean,
+    val isMain: Boolean,
+) {
+    val name: String get() = list.name
+    val id: Long get() = list.id
+}
+
+/** The name prompt used for both creating and renaming a list. */
+data class NameDialogState(
+    /** Null when creating a new list. */
+    val target: ShoppingList?,
+    val name: String,
+) {
+    val isRename: Boolean get() = target != null
+    val canSave: Boolean get() = name.isNotBlank()
+}
+
+data class SwitcherState(
+    val visible: Boolean = false,
+    val nameDialog: NameDialogState? = null,
+)
+
+/**
+ * The always-visible field at the bottom of the screen. Typing a name and
+ * pressing enter is the whole interaction; the category comes from the
+ * classifier and is shown so it can be corrected before or after adding.
+ */
+data class QuickAddState(
+    val text: String = "",
+    val suggested: Category = Category.DEFAULT,
+    val recognized: Boolean = false,
+) {
+    val canAdd: Boolean get() = text.isNotBlank()
 }
 
 /** State of the sheet used for both adding and editing a single item. */

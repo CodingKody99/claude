@@ -13,13 +13,16 @@ class RoomShoppingRepositoryTest {
 
     private val dao = FakeShoppingDao()
     private val overrideDao = FakeCategoryOverrideDao()
+    private val listDao = FakeShoppingListDao()
     private var clock = 1_000L
-    private val repository = RoomShoppingRepository(dao, overrideDao) { clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao) { clock }
+
+    private val listId = ShoppingList.DEFAULT_ID
 
     @Test
     fun `add stores the item unchecked and stamped with the current time`() = runTest {
         clock = 4_242L
-        val id = repository.add(NewItem("Tomaten", "500 g", Category.OBST_GEMUESE))
+        val id = repository.add(listId, NewItem("Tomaten", "500 g", Category.OBST_GEMUESE))
 
         val stored = dao.items.single()
         assertEquals(stored.id, id)
@@ -32,7 +35,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `add trims surrounding whitespace`() = runTest {
-        repository.add(NewItem("  Milch  ", "  2 l  ", Category.MOLKEREI))
+        repository.add(listId, NewItem("  Milch  ", "  2 l  ", Category.MOLKEREI))
 
         val stored = dao.items.single()
         assertEquals("Milch", stored.name)
@@ -41,14 +44,15 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `add ignores a blank name and reports no id`() = runTest {
-        assertNull(repository.add(NewItem("   ", "1")))
-        assertNull(repository.add(NewItem("")))
+        assertNull(repository.add(listId, NewItem("   ", "1")))
+        assertNull(repository.add(listId, NewItem("")))
         assertTrue(dao.items.isEmpty())
     }
 
     @Test
     fun `addAll keeps the given order and returns every new id`() = runTest {
         val ids = repository.addAll(
+            listId,
             listOf(
                 NewItem("Tomaten", category = Category.OBST_GEMUESE),
                 NewItem("Milch", category = Category.MOLKEREI),
@@ -63,7 +67,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `addAll skips blank names without losing the other ids`() = runTest {
-        val ids = repository.addAll(listOf(NewItem("Milch"), NewItem("  "), NewItem("Brot")))
+        val ids = repository.addAll(listId, listOf(NewItem("Milch"), NewItem("  "), NewItem("Brot")))
 
         assertEquals(2, ids.size)
         assertEquals(listOf("Milch", "Brot"), dao.items.map { it.name })
@@ -71,8 +75,8 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `setChecked toggles only the targeted item`() = runTest {
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
-        repository.add(NewItem("Milch", category = Category.MOLKEREI))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Milch", category = Category.MOLKEREI))
         val (brot, milch) = dao.items
 
         repository.setChecked(brot.id, true)
@@ -83,7 +87,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `update keeps id and created time but replaces the rest`() = runTest {
-        repository.add(NewItem("Brot", "1", Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", "1", Category.BACKWAREN))
         val original = dao.items.single()
 
         repository.update(original, "  Vollkornbrot ", " 2 Stück ", Category.VORRAT)
@@ -98,7 +102,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `update ignores a blank name instead of wiping the item`() = runTest {
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
         val original = dao.items.single()
 
         repository.update(original, "   ", "", Category.SONSTIGES)
@@ -108,18 +112,18 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `deleteChecked removes only checked items`() = runTest {
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
-        repository.add(NewItem("Milch", category = Category.MOLKEREI))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Milch", category = Category.MOLKEREI))
         repository.setChecked(dao.items.first().id, true)
 
-        repository.deleteChecked()
+        repository.deleteChecked(listId)
 
         assertEquals(listOf("Milch"), dao.items.map { it.name })
     }
 
     @Test
     fun `restore brings items back under fresh ids and keeps their state`() = runTest {
-        repository.add(NewItem("Brot", "1 Stück", Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", "1 Stück", Category.BACKWAREN))
         val original = dao.items.single()
         repository.setChecked(original.id, true)
         val deleted = dao.items.single()
@@ -137,11 +141,11 @@ class RoomShoppingRepositoryTest {
     }
 
     @Test
-    fun `deleteAll empties the list`() = runTest {
-        repository.add(NewItem("Brot"))
-        repository.add(NewItem("Milch"))
+    fun `clearList empties the list`() = runTest {
+        repository.add(listId, NewItem("Brot"))
+        repository.add(listId, NewItem("Milch"))
 
-        repository.deleteAll()
+        repository.clearList(listId)
 
         assertTrue(dao.items.isEmpty())
     }

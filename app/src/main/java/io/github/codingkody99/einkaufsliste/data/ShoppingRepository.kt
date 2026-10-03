@@ -4,7 +4,7 @@ import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-/** An item about to be put on the list, already filed into a category. */
+/** An item about to be put on a list, already filed into a category. */
 data class NewItem(
     val name: String,
     val quantity: String = "",
@@ -13,16 +13,35 @@ data class NewItem(
 
 interface ShoppingRepository {
 
-    fun observeItems(): Flow<List<ShoppingItem>>
+    // --- lists ----------------------------------------------------------------
+
+    fun observeLists(): Flow<List<ShoppingList>>
+
+    /** How many open and total items each list holds, keyed by list id. */
+    fun observeListCounts(): Flow<Map<Long, ListItemCounts>>
+
+    /** Creates the main list if there is none, and returns its id either way. */
+    suspend fun ensureMainList(): Long
+
+    suspend fun createList(name: String): Long?
+
+    suspend fun renameList(id: Long, name: String)
+
+    /** Removes a list and its items. Refuses to remove the last remaining list. */
+    suspend fun deleteList(id: Long): Boolean
+
+    // --- items ----------------------------------------------------------------
+
+    fun observeItems(listId: Long): Flow<List<ShoppingItem>>
 
     /** Categories the user corrected, keyed by normalized name. */
     fun observeOverrides(): Flow<Map<String, Category>>
 
     /** Returns the new row id, or null when the name was blank. */
-    suspend fun add(item: NewItem): Long?
+    suspend fun add(listId: Long, item: NewItem): Long?
 
     /** Returns the new row ids, in the order the items were given. */
-    suspend fun addAll(items: List<NewItem>): List<Long>
+    suspend fun addAll(listId: Long, items: List<NewItem>): List<Long>
 
     suspend fun setChecked(id: Long, checked: Boolean)
 
@@ -33,9 +52,11 @@ interface ShoppingRepository {
     /** Re-inserts deleted items (under fresh ids) to back the undo action. */
     suspend fun restore(items: List<ShoppingItem>)
 
-    suspend fun deleteChecked()
+    suspend fun deleteChecked(listId: Long)
 
-    suspend fun deleteAll()
+    suspend fun clearList(listId: Long)
+
+    // --- learned categories ---------------------------------------------------
 
     /** Teaches the app where this name belongs from now on. */
     suspend fun rememberCategory(name: String, category: Category)
@@ -46,19 +67,63 @@ interface ShoppingRepository {
 class RoomShoppingRepository(
     private val dao: ShoppingDao,
     private val overrideDao: CategoryOverrideDao,
+    private val listDao: ShoppingListDao,
     private val now: () -> Long = System::currentTimeMillis,
 ) : ShoppingRepository {
 
-    override fun observeItems(): Flow<List<ShoppingItem>> = dao.observeAll()
+    // --- lists ----------------------------------------------------------------
+
+    override fun observeLists(): Flow<List<ShoppingList>> = listDao.observeAll()
+
+    override fun observeListCounts(): Flow<Map<Long, ListItemCounts>> =
+        dao.observeCounts().map { rows -> rows.associateBy { it.listId } }
+
+    override suspend fun ensureMainList(): Long {
+        listDao.firstList()?.let { return it.id }
+        return listDao.insert(
+            ShoppingList(
+                id = ShoppingList.DEFAULT_ID,
+                name = ShoppingList.DEFAULT_NAME,
+                position = 0,
+                createdAt = now(),
+            ),
+        )
+    }
+
+    override suspend fun createList(name: String): Long? {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) return null
+        val position = (listDao.maxPosition() ?: 0) + 1
+        return listDao.insert(ShoppingList(name = cleanName, position = position, createdAt = now()))
+    }
+
+    override suspend fun renameList(id: Long, name: String) {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) return
+        listDao.rename(id, cleanName)
+    }
+
+    override suspend fun deleteList(id: Long): Boolean {
+        // Without a list there is nowhere to put anything, so one always remains.
+        if (listDao.count() <= 1) return false
+        dao.deleteByList(id)
+        listDao.delete(id)
+        return true
+    }
+
+    // --- items ----------------------------------------------------------------
+
+    override fun observeItems(listId: Long): Flow<List<ShoppingItem>> = dao.observeByList(listId)
 
     override fun observeOverrides(): Flow<Map<String, Category>> =
         overrideDao.observeAll().map { rows -> rows.associate { it.nameKey to it.category } }
 
-    override suspend fun add(item: NewItem): Long? {
+    override suspend fun add(listId: Long, item: NewItem): Long? {
         val name = item.name.trim()
         if (name.isEmpty()) return null
         return dao.insert(
             ShoppingItem(
+                listId = listId,
                 name = name,
                 quantity = item.quantity.trim(),
                 category = item.category,
@@ -68,8 +133,8 @@ class RoomShoppingRepository(
         )
     }
 
-    override suspend fun addAll(items: List<NewItem>): List<Long> =
-        items.mapNotNull { add(it) }
+    override suspend fun addAll(listId: Long, items: List<NewItem>): List<Long> =
+        items.mapNotNull { add(listId, it) }
 
     override suspend fun setChecked(id: Long, checked: Boolean) = dao.setChecked(id, checked)
 
@@ -90,9 +155,11 @@ class RoomShoppingRepository(
         items.forEach { dao.insert(it.copy(id = 0)) }
     }
 
-    override suspend fun deleteChecked() = dao.deleteChecked()
+    override suspend fun deleteChecked(listId: Long) = dao.deleteChecked(listId)
 
-    override suspend fun deleteAll() = dao.deleteAll()
+    override suspend fun clearList(listId: Long) = dao.deleteByList(listId)
+
+    // --- learned categories ---------------------------------------------------
 
     override suspend fun rememberCategory(name: String, category: Category) {
         val key = TextNormalizer.normalize(name)

@@ -8,24 +8,30 @@ import io.github.codingkody99.einkaufsliste.data.HttpRecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.NewItem
 import io.github.codingkody99.einkaufsliste.data.RecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
+import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.data.ShoppingRepository
 import io.github.codingkody99.einkaufsliste.domain.CategoryClassifier
 import io.github.codingkody99.einkaufsliste.domain.RecipeExtractor
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListGrouper
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListParser
 import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ShoppingListViewModel(
     private val repository: ShoppingRepository,
     private val classifier: CategoryClassifier = CategoryClassifier(),
@@ -34,23 +40,63 @@ class ShoppingListViewModel(
     private val recipeExtractor: RecipeExtractor = RecipeExtractor(),
 ) : ViewModel() {
 
-    val uiState: StateFlow<ShoppingListUiState> = repository.observeItems()
-        .map { items ->
-            ShoppingListUiState(
-                rows = ShoppingListGrouper.group(items),
-                openCount = items.count { !it.isChecked },
-                checkedCount = items.count { it.isChecked },
-                isLoading = false,
-            )
+    /**
+     * Deliberately not persisted: opening the app always lands on the main list,
+     * so switching lists never leaves you somewhere you forgot you were.
+     */
+    private val _selectedListId = MutableStateFlow<Long?>(null)
+    val selectedListId: StateFlow<Long?> = _selectedListId.asStateFlow()
+
+    init {
+        viewModelScope.launch { _selectedListId.value = repository.ensureMainList() }
+    }
+
+    val uiState: StateFlow<ShoppingListUiState> = _selectedListId
+        .flatMapLatest { listId ->
+            if (listId == null) {
+                flowOf(ShoppingListUiState())
+            } else {
+                repository.observeItems(listId).map { items ->
+                    ShoppingListUiState(
+                        rows = ShoppingListGrouper.group(items),
+                        openCount = items.count { !it.isChecked },
+                        checkedCount = items.count { it.isChecked },
+                        isLoading = false,
+                    )
+                }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ShoppingListUiState())
 
+    val lists: StateFlow<List<ListSummary>> = combine(
+        repository.observeLists(),
+        repository.observeListCounts(),
+        _selectedListId,
+    ) { lists, counts, currentId ->
+        lists.mapIndexed { index, list ->
+            ListSummary(
+                list = list,
+                openCount = counts[list.id]?.openCount ?: 0,
+                totalCount = counts[list.id]?.totalCount ?: 0,
+                isCurrent = list.id == currentId,
+                isMain = index == 0,
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
+
     /**
-     * Collected eagerly because the editor and the import preview classify on
-     * every keystroke and must not fall back to the bare lexicon meanwhile.
+     * Collected eagerly because the quick-add field, the editor and the import
+     * preview classify on every keystroke and must not fall back to the bare
+     * lexicon meanwhile.
      */
     private val overrides: StateFlow<Map<String, Category>> = repository.observeOverrides()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    private val _switcher = MutableStateFlow(SwitcherState())
+    val switcher: StateFlow<SwitcherState> = _switcher.asStateFlow()
+
+    private val _quickAdd = MutableStateFlow(QuickAddState())
+    val quickAdd: StateFlow<QuickAddState> = _quickAdd.asStateFlow()
 
     private val _editor = MutableStateFlow(EditorState())
     val editor: StateFlow<EditorState> = _editor.asStateFlow()
@@ -62,6 +108,92 @@ class ShoppingListViewModel(
     val notices: SharedFlow<Notice> = _notices
 
     private var noticeCounter = 0L
+
+    // --- lists ----------------------------------------------------------------
+
+    fun openSwitcher() = _switcher.update { it.copy(visible = true) }
+
+    fun dismissSwitcher() {
+        _switcher.value = SwitcherState()
+    }
+
+    fun selectList(id: Long) {
+        _selectedListId.value = id
+        dismissSwitcher()
+    }
+
+    fun startCreateList() = _switcher.update {
+        it.copy(nameDialog = NameDialogState(target = null, name = ""))
+    }
+
+    fun startRenameList(list: ShoppingList) = _switcher.update {
+        it.copy(nameDialog = NameDialogState(target = list, name = list.name))
+    }
+
+    fun onNameDialogChange(value: String) = _switcher.update { state ->
+        state.copy(nameDialog = state.nameDialog?.copy(name = value))
+    }
+
+    fun dismissNameDialog() = _switcher.update { it.copy(nameDialog = null) }
+
+    fun confirmNameDialog() {
+        val dialog = _switcher.value.nameDialog ?: return
+        if (!dialog.canSave) return
+        val target = dialog.target
+        viewModelScope.launch {
+            if (target == null) {
+                // A newly created list is the one you wanted to work on.
+                repository.createList(dialog.name)?.let { _selectedListId.value = it }
+            } else {
+                repository.renameList(target.id, dialog.name)
+            }
+        }
+        _switcher.update { it.copy(nameDialog = null) }
+    }
+
+    fun deleteList(summary: ListSummary) {
+        viewModelScope.launch {
+            if (!repository.deleteList(summary.id)) {
+                emitNotice("Die letzte Liste kann nicht gelöscht werden.", undo = null)
+                return@launch
+            }
+            // Never leave the screen pointing at a list that is gone.
+            if (_selectedListId.value == summary.id) {
+                _selectedListId.value = repository.ensureMainList()
+            }
+            emitNotice("Liste „${summary.name}“ gelöscht", undo = null)
+        }
+    }
+
+    // --- quick add ------------------------------------------------------------
+
+    fun onQuickAddChange(value: String) = _quickAdd.update {
+        val match = classifier.match(value, overrides.value)
+        it.copy(
+            text = value,
+            suggested = match?.category ?: Category.DEFAULT,
+            recognized = match != null,
+        )
+    }
+
+    /** Adds what is typed and clears the field, so the next item can follow. */
+    fun submitQuickAdd() {
+        val state = _quickAdd.value
+        val listId = _selectedListId.value
+        if (!state.canAdd || listId == null) return
+        viewModelScope.launch {
+            repository.add(listId, NewItem(state.text, "", state.suggested))
+        }
+        _quickAdd.value = QuickAddState()
+    }
+
+    /** Hands what is typed over to the full editor, for amount and category. */
+    fun expandQuickAdd() {
+        val typed = _quickAdd.value.text
+        _quickAdd.value = QuickAddState()
+        openAddEditor()
+        if (typed.isNotBlank()) onNameChange(typed)
+    }
 
     // --- single item editor ----------------------------------------------------
 
@@ -108,14 +240,15 @@ class ShoppingListViewModel(
     /** Saves the editor contents and closes the sheet. No-op on a blank name. */
     fun save() {
         val state = _editor.value
-        if (!state.canSave) return
+        val listId = _selectedListId.value
+        if (!state.canSave || listId == null) return
         val editing = state.editing
         viewModelScope.launch {
             if (state.teachesSomething) {
                 repository.rememberCategory(state.name, state.category)
             }
             if (editing == null) {
-                repository.add(NewItem(state.name, state.quantity, state.category))
+                repository.add(listId, NewItem(state.name, state.quantity, state.category))
             } else {
                 repository.update(editing, state.name, state.quantity, state.category)
             }
@@ -191,12 +324,17 @@ class ShoppingListViewModel(
         }
     }
 
-    /** Parses text into preview rows, marking what is already on the list. */
+    /** Parses text into preview rows, marking what is already on this list. */
     private suspend fun buildRows(text: String): List<ImportRow> {
-        val existing = repository.observeItems().first()
-            .filterNot { it.isChecked }
-            .map { TextNormalizer.normalize(it.name) }
-            .toSet()
+        val listId = _selectedListId.value
+        val existing = if (listId == null) {
+            emptySet()
+        } else {
+            repository.observeItems(listId).first()
+                .filterNot { it.isChecked }
+                .map { TextNormalizer.normalize(it.name) }
+                .toSet()
+        }
 
         return parser.parse(text, overrides.value).mapIndexed { index, entry ->
             val duplicate = TextNormalizer.normalize(entry.name) in existing
@@ -232,13 +370,15 @@ class ShoppingListViewModel(
 
     fun applyImport() {
         val rows = _import.value.selectedRows
-        if (rows.isEmpty()) return
+        val listId = _selectedListId.value
+        if (rows.isEmpty() || listId == null) return
         viewModelScope.launch {
             // A category the user moved by hand is worth remembering for next time.
             rows.filter { it.recategorized }
                 .forEach { repository.rememberCategory(it.name, it.category) }
 
             val ids = repository.addAll(
+                listId,
                 rows.map { NewItem(name = it.name, quantity = it.quantity, category = it.category) },
             )
             emitNotice(
@@ -263,19 +403,21 @@ class ShoppingListViewModel(
     }
 
     fun deleteChecked() {
+        val listId = _selectedListId.value ?: return
         viewModelScope.launch {
-            val removed = repository.observeItems().first().filter { it.isChecked }
+            val removed = repository.observeItems(listId).first().filter { it.isChecked }
             if (removed.isEmpty()) return@launch
-            repository.deleteChecked()
+            repository.deleteChecked(listId)
             emitNotice("${removed.size} erledigte entfernt", UndoAction.Restore(removed))
         }
     }
 
-    fun deleteAll() {
+    fun clearList() {
+        val listId = _selectedListId.value ?: return
         viewModelScope.launch {
-            val removed = repository.observeItems().first()
+            val removed = repository.observeItems(listId).first()
             if (removed.isEmpty()) return@launch
-            repository.deleteAll()
+            repository.clearList(listId)
             emitNotice("Liste geleert (${removed.size})", UndoAction.Restore(removed))
         }
     }

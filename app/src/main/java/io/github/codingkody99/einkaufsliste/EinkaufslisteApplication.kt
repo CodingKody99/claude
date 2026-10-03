@@ -13,6 +13,10 @@ class EinkaufslisteApplication : Application() {
 
     val repository: ShoppingRepository by lazy {
         val database = AppDatabase.get(this)
-        RoomShoppingRepository(database.shoppingDao(), database.categoryOverrideDao())
+        RoomShoppingRepository(
+            dao = database.shoppingDao(),
+            overrideDao = database.categoryOverrideDao(),
+            listDao = database.shoppingListDao(),
+        )
     }
 }

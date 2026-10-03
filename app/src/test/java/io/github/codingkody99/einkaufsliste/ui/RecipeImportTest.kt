@@ -5,7 +5,9 @@ import io.github.codingkody99.einkaufsliste.data.FakeCategoryOverrideDao
 import io.github.codingkody99.einkaufsliste.data.FakeRecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingDao
 import io.github.codingkody99.einkaufsliste.data.NewItem
+import io.github.codingkody99.einkaufsliste.data.FakeShoppingListDao
 import io.github.codingkody99.einkaufsliste.data.RoomShoppingRepository
+import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,8 +35,11 @@ class RecipeImportTest {
     private val dispatcher = StandardTestDispatcher()
     private val dao = FakeShoppingDao()
     private val overrideDao = FakeCategoryOverrideDao()
+    private val listDao = FakeShoppingListDao()
     private var clock = 0L
-    private val repository = RoomShoppingRepository(dao, overrideDao) { ++clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao) { ++clock }
+
+    private val listId = ShoppingList.DEFAULT_ID
     private val fetcher = FakeRecipeFetcher()
 
     private lateinit var viewModel: ShoppingListViewModel
@@ -169,7 +174,7 @@ class RecipeImportTest {
     @Test
     fun `ingredients already on the list are flagged as duplicates`() = runTest(dispatcher) {
         collectUiState()
-        repository.add(NewItem("Milch", category = Category.MOLKEREI))
+        repository.add(listId, NewItem("Milch", category = Category.MOLKEREI))
         fetcher.returns(pancakePage)
         advanceUntilIdle()
 

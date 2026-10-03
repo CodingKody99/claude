@@ -28,7 +28,14 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   **Rückgängig**; auch ein kompletter Import lässt sich in einem Zug zurücknehmen
 - **Material You**: übernimmt auf Android 12+ die Farben deines Hintergrundbilds,
   inklusive Dark Mode
-- **Alles lokal** in einer Room-Datenbank; keine Netzwerkberechtigung im Manifest
+- **Mehrere Listen**: die App startet immer auf der Hauptliste; über den Namen oben
+  wechselt man zu anderen Listen, legt neue an, benennt um und löscht
+- **Schnelleingabe unten**: das Feld ist immer da — antippen, Artikel eintippen,
+  Enter. Die erkannte Kategorie steht darüber; ein Tipp darauf öffnet Menge und
+  Kategorie
+- **Größere Schrift** als der Material-Standard, zusätzlich zur Systemeinstellung,
+  mit kräftigeren Artikelnamen und großzügigeren Zeilen
+- **Alles lokal** in einer Room-Datenbank
 
 ### Wie aus Freitext eine sortierte Liste wird
 
@@ -127,10 +134,11 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 ├── MainActivity.kt               Einstiegspunkt, setzt Theme und Screen
 ├── data/                         Room
 │   ├── Category.kt               Kategorien; Reihenfolge = Route im Supermarkt
-│   ├── ShoppingItem.kt
+│   ├── ShoppingItem.kt           gehört zu genau einer Liste
+│   ├── ShoppingList.kt           die Listen selbst
 │   ├── CategoryOverride.kt       gelernte Korrekturen
-│   ├── ShoppingDao.kt / CategoryOverrideDao.kt
-│   ├── AppDatabase.kt            v2, mit Migration für die Lerntabelle
+│   ├── ShoppingDao.kt / ShoppingListDao.kt / CategoryOverrideDao.kt
+│   ├── AppDatabase.kt            v3, mit Migrationen für Lerntabelle und Listen
 │   └── ShoppingRepository.kt     Interface + Room-Implementierung
 │   └── RecipeFetcher.kt          lädt eine Rezeptseite (nur HttpURLConnection)
 ├── domain/                       reines Kotlin, ohne Android und ohne Room
@@ -148,10 +156,11 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
     ├── ShoppingListUiState.kt
     ├── ShoppingListViewModel.kt
     ├── ShoppingListViewModelFactory.kt
-    ├── ShoppingListScreen.kt     Liste + Freitextfeld oben
+    ├── ShoppingListScreen.kt     Liste, Einfügefeld oben, Schnelleingabe unten
+    ├── ListSwitcherSheet.kt      Listen wechseln, anlegen, umbenennen
     ├── ImportSheet.kt            Einfügen und Vorschau
     ├── ItemEditorSheet.kt
-    └── theme/
+    └── theme/                    Farben und die vergrößerte Typografie
 ```
 
 Alles, was Entscheidungen trifft — Normalisierung, Lexikon, Zuordnung, Mengen,
@@ -181,6 +190,11 @@ Abgedeckt sind unter anderem:
   Rezept-Liste am Stück
 - **Import-Ablauf**: Vorschau in Supermarkt-Reihenfolge, Duplikaterkennung,
   Ab-/Anwählen, Umkategorisieren samt Lernen, Übernehmen und Rückgängig
+- **Mehrere Listen**: Hauptliste beim Start (nicht die zuletzt benutzte), Anlegen,
+  Umbenennen, Löschen samt Artikeln, Zählerstände je Liste, und dass die letzte
+  Liste nicht gelöscht werden kann
+- **Schnelleingabe**: Kategorie beim Tippen, Hinzufügen und Leeren des Felds,
+  Übergabe des Getippten an den vollen Editor
 - **Rezept-Links**: Linkerkennung im eingefügten Text, Zutaten aus JSON-LD
   (auch verschachtelt in `@graph`, `@type` als Liste, Zutat als einzelner String),
   Microdata-Rückfall, defektes JSON, Seite ohne Rezept, Ladefehler — und ein
@@ -198,3 +212,4 @@ Abgedeckt sind unter anderem:
 | JSON | kotlinx.serialization 1.7.3 (nur Laufzeit, kein Compiler-Plugin) |
 | Build | Gradle 8.9, Android Gradle Plugin 8.5.2, JDK 17 |
 | minSdk / targetSdk | 26 / 34 |
+| Schriftgrößen | Material-3-Skala, um 2–4 sp erhöht; Systemskalierung gilt zusätzlich |

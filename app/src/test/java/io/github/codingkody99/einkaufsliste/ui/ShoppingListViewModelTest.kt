@@ -4,8 +4,10 @@ import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.FakeCategoryOverrideDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingDao
 import io.github.codingkody99.einkaufsliste.data.NewItem
+import io.github.codingkody99.einkaufsliste.data.FakeShoppingListDao
 import io.github.codingkody99.einkaufsliste.data.RoomShoppingRepository
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
+import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,8 +33,11 @@ class ShoppingListViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val dao = FakeShoppingDao()
     private val overrideDao = FakeCategoryOverrideDao()
+    private val listDao = FakeShoppingListDao()
     private var clock = 0L
-    private val repository = RoomShoppingRepository(dao, overrideDao) { ++clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao) { ++clock }
+
+    private val listId = ShoppingList.DEFAULT_ID
 
     private lateinit var viewModel: ShoppingListViewModel
 
@@ -68,7 +73,7 @@ class ShoppingListViewModelTest {
     @Test
     fun `toggling moves the item into the done section and back`() = runTest(dispatcher) {
         val state = collectUiState()
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
         advanceUntilIdle()
 
         viewModel.toggleChecked(state().entries().single())
@@ -198,7 +203,7 @@ class ShoppingListViewModelTest {
     @Test
     fun `editing an existing item updates it in place`() = runTest(dispatcher) {
         val state = collectUiState()
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
         advanceUntilIdle()
         val stored = state().entries().single()
 
@@ -307,7 +312,7 @@ class ShoppingListViewModelTest {
     @Test
     fun `items already on the list are marked and not selected`() = runTest(dispatcher) {
         collectUiState()
-        repository.add(NewItem("Tomaten", category = Category.OBST_GEMUESE))
+        repository.add(listId, NewItem("Tomaten", category = Category.OBST_GEMUESE))
         advanceUntilIdle()
 
         viewModel.openImport()
@@ -325,7 +330,7 @@ class ShoppingListViewModelTest {
     @Test
     fun `an item that is already ticked off does not count as a duplicate`() = runTest(dispatcher) {
         val state = collectUiState()
-        repository.add(NewItem("Tomaten", category = Category.OBST_GEMUESE))
+        repository.add(listId, NewItem("Tomaten", category = Category.OBST_GEMUESE))
         advanceUntilIdle()
         viewModel.toggleChecked(state().entries().single())
         advanceUntilIdle()
@@ -543,7 +548,7 @@ class ShoppingListViewModelTest {
     fun `deleting emits a notice that restores the item`() = runTest(dispatcher) {
         val state = collectUiState()
         val notices = collectNotices()
-        repository.add(NewItem("Brot", "1 Stück", Category.BACKWAREN))
+        repository.add(listId, NewItem("Brot", "1 Stück", Category.BACKWAREN))
         advanceUntilIdle()
         val stored = state().entries().single()
 
@@ -564,8 +569,8 @@ class ShoppingListViewModelTest {
     fun `deleting checked items leaves the open ones alone`() = runTest(dispatcher) {
         val state = collectUiState()
         val notices = collectNotices()
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
-        repository.add(NewItem("Milch", category = Category.MOLKEREI))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Milch", category = Category.MOLKEREI))
         advanceUntilIdle()
         viewModel.toggleChecked(state().entries().first { it.name == "Brot" })
         advanceUntilIdle()
@@ -583,21 +588,21 @@ class ShoppingListViewModelTest {
         val notices = collectNotices()
 
         viewModel.deleteChecked()
-        viewModel.deleteAll()
+        viewModel.clearList()
         advanceUntilIdle()
 
         assertTrue(notices.isEmpty())
     }
 
     @Test
-    fun `deleteAll removes everything and can be undone`() = runTest(dispatcher) {
+    fun `clearList removes everything and can be undone`() = runTest(dispatcher) {
         val state = collectUiState()
         val notices = collectNotices()
-        repository.add(NewItem("Brot", category = Category.BACKWAREN))
-        repository.add(NewItem("Milch", category = Category.MOLKEREI))
+        repository.add(listId, NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(listId, NewItem("Milch", category = Category.MOLKEREI))
         advanceUntilIdle()
 
-        viewModel.deleteAll()
+        viewModel.clearList()
         advanceUntilIdle()
         assertTrue(state().rows.isEmpty())
 
@@ -611,8 +616,8 @@ class ShoppingListViewModelTest {
     fun `each notice gets its own id`() = runTest(dispatcher) {
         val state = collectUiState()
         val notices = collectNotices()
-        repository.add(NewItem("Brot"))
-        repository.add(NewItem("Milch"))
+        repository.add(listId, NewItem("Brot"))
+        repository.add(listId, NewItem("Milch"))
         advanceUntilIdle()
 
         state().entries().forEach { viewModel.delete(it) }

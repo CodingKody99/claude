@@ -12,13 +12,27 @@ class FakeShoppingDao : ShoppingDao {
 
     val items: List<ShoppingItem> get() = sorted(state.value)
 
+    fun itemsOf(listId: Long): List<ShoppingItem> = items.filter { it.listId == listId }
+
     private fun sorted(list: List<ShoppingItem>) =
         list.sortedWith(compareBy({ it.createdAt }, { it.id }))
 
-    override fun observeAll(): Flow<List<ShoppingItem>> = state.map { sorted(it) }
+    override fun observeByList(listId: Long): Flow<List<ShoppingItem>> =
+        state.map { all -> sorted(all).filter { it.listId == listId } }
+
+    override fun observeCounts(): Flow<List<ListItemCounts>> = state.map { all ->
+        all.groupBy { it.listId }.map { (listId, rows) ->
+            ListItemCounts(
+                listId = listId,
+                openCount = rows.count { !it.isChecked },
+                totalCount = rows.size,
+            )
+        }
+    }
 
     override suspend fun insert(item: ShoppingItem): Long {
         val id = if (item.id == 0L) nextId++ else item.id
+        if (id >= nextId) nextId = id + 1
         state.value = state.value + item.copy(id = id)
         return id
     }
@@ -35,11 +49,11 @@ class FakeShoppingDao : ShoppingDao {
         state.value = state.value.filterNot { it.id == id }
     }
 
-    override suspend fun deleteChecked() {
-        state.value = state.value.filterNot { it.isChecked }
+    override suspend fun deleteChecked(listId: Long) {
+        state.value = state.value.filterNot { it.listId == listId && it.isChecked }
     }
 
-    override suspend fun deleteAll() {
-        state.value = emptyList()
+    override suspend fun deleteByList(listId: Long) {
+        state.value = state.value.filterNot { it.listId == listId }
     }
 }

@@ -11,14 +11,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -27,11 +32,12 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -50,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -58,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
+import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListGrouper
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListRow
 import io.github.codingkody99.einkaufsliste.ui.theme.EinkaufslisteTheme
@@ -68,6 +76,9 @@ fun ShoppingListRoute(
     viewModel: ShoppingListViewModel = viewModel(factory = ShoppingListViewModelFactory),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lists by viewModel.lists.collectAsStateWithLifecycle()
+    val switcher by viewModel.switcher.collectAsStateWithLifecycle()
+    val quickAdd by viewModel.quickAdd.collectAsStateWithLifecycle()
     val editor by viewModel.editor.collectAsStateWithLifecycle()
     val importState by viewModel.import.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,15 +91,40 @@ fun ShoppingListRoute(
 
     ShoppingListScreen(
         uiState = uiState,
+        listName = lists.firstOrNull { it.isCurrent }?.name ?: ShoppingList.DEFAULT_NAME,
+        quickAdd = quickAdd,
         snackbarHostState = snackbarHostState,
+        onTitleClick = viewModel::openSwitcher,
         onPasteClick = viewModel::openImport,
-        onAddClick = viewModel::openAddEditor,
+        onQuickAddChange = viewModel::onQuickAddChange,
+        onQuickAddSubmit = viewModel::submitQuickAdd,
+        onQuickAddExpand = viewModel::expandQuickAdd,
         onItemClick = viewModel::openEditEditor,
         onToggle = viewModel::toggleChecked,
         onDelete = viewModel::delete,
         onDeleteChecked = viewModel::deleteChecked,
-        onDeleteAll = viewModel::deleteAll,
+        onClearList = viewModel::clearList,
     )
+
+    if (switcher.visible) {
+        ListSwitcherSheet(
+            lists = lists,
+            onSelect = viewModel::selectList,
+            onCreate = viewModel::startCreateList,
+            onRename = viewModel::startRenameList,
+            onDelete = viewModel::deleteList,
+            onDismiss = viewModel::dismissSwitcher,
+        )
+    }
+
+    switcher.nameDialog?.let { dialog ->
+        ListNameDialog(
+            state = dialog,
+            onNameChange = viewModel::onNameDialogChange,
+            onConfirm = viewModel::confirmNameDialog,
+            onDismiss = viewModel::dismissNameDialog,
+        )
+    }
 
     if (editor.visible) {
         ItemEditorSheet(
@@ -120,26 +156,41 @@ fun ShoppingListRoute(
 @Composable
 fun ShoppingListScreen(
     uiState: ShoppingListUiState,
+    listName: String,
+    quickAdd: QuickAddState,
     snackbarHostState: SnackbarHostState,
+    onTitleClick: () -> Unit,
     onPasteClick: () -> Unit,
-    onAddClick: () -> Unit,
+    onQuickAddChange: (String) -> Unit,
+    onQuickAddSubmit: () -> Unit,
+    onQuickAddExpand: () -> Unit,
     onItemClick: (ShoppingItem) -> Unit,
     onToggle: (ShoppingItem) -> Unit,
     onDelete: (ShoppingItem) -> Unit,
     onDeleteChecked: () -> Unit,
-    onDeleteAll: () -> Unit,
+    onClearList: () -> Unit,
 ) {
-    var confirmClearAll by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("Einkaufsliste")
+                    // Tapping the name is how you reach the other lists.
+                    Row(
+                        modifier = Modifier.clickable(onClick = onTitleClick),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = subtitleFor(uiState),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = listName,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Liste wechseln",
+                            modifier = Modifier.size(28.dp),
                         )
                     }
                 },
@@ -148,7 +199,7 @@ fun ShoppingListScreen(
                         checkedCount = uiState.checkedCount,
                         totalCount = uiState.openCount + uiState.checkedCount,
                         onDeleteChecked = onDeleteChecked,
-                        onClearAllRequest = { confirmClearAll = true },
+                        onClearRequest = { confirmClear = true },
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -157,11 +208,12 @@ fun ShoppingListScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddClick,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Hinzufügen") },
+        bottomBar = {
+            QuickAddBar(
+                state = quickAdd,
+                onTextChange = onQuickAddChange,
+                onSubmit = onQuickAddSubmit,
+                onExpand = onQuickAddExpand,
             )
         },
     ) { innerPadding ->
@@ -170,9 +222,15 @@ fun ShoppingListScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            Text(
+                text = subtitleFor(uiState),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 20.dp, top = 10.dp),
+            )
+
             PasteField(onClick = onPasteClick)
 
-            // weight, not fillMaxSize: the paste field above already took height.
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -183,8 +241,7 @@ fun ShoppingListScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        // Leaves room for the FAB so the last row stays reachable.
-                        contentPadding = PaddingValues(bottom = 96.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp),
                     ) {
                         items(items = uiState.rows, key = { it.key }) { row ->
                             when (row) {
@@ -212,30 +269,107 @@ fun ShoppingListScreen(
         }
     }
 
-    if (confirmClearAll) {
+    if (confirmClear) {
         AlertDialog(
-            onDismissRequest = { confirmClearAll = false },
-            title = { Text("Liste leeren?") },
-            text = { Text("Alle Einträge werden entfernt. Das lässt sich direkt danach rückgängig machen.") },
+            onDismissRequest = { confirmClear = false },
+            title = { Text("„$listName“ leeren?") },
+            text = { Text("Alle Einträge dieser Liste werden entfernt. Das lässt sich direkt danach rückgängig machen.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        confirmClearAll = false
-                        onDeleteAll()
+                        confirmClear = false
+                        onClearList()
                     },
                 ) { Text("Leeren") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClearAll = false }) { Text("Abbrechen") }
+                TextButton(onClick = { confirmClear = false }) { Text("Abbrechen") }
             },
         )
     }
 }
 
 /**
- * The entry point for pasting a whole list. Looks like a text field and opens
- * the import sheet, where there is room for a real multi-line editor.
+ * The field for adding single items, always visible at the bottom.
+ *
+ * Replaces a floating button on purpose: tapping straight into the field is one
+ * step instead of three (button, sheet, field). The detected category is shown
+ * above it, and tapping that line opens the full editor for amount and category.
  */
+@Composable
+private fun QuickAddBar(
+    state: QuickAddState,
+    onTextChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                // imePadding first: it consumes the inset, so the navigation bar
+                // padding below only applies while the keyboard is closed.
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            if (state.canAdd) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExpand)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${state.suggested.emoji}  ${state.suggested.label}" +
+                            if (state.recognized) "" else "  (nicht erkannt)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "Menge & Kategorie",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = state.text,
+                    onValueChange = onTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Artikel hinzufügen …") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    // Focus is kept so the next item can be typed straight away.
+                    keyboardActions = KeyboardActions(onDone = { if (state.canAdd) onSubmit() }),
+                )
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    onClick = onSubmit,
+                    enabled = state.canAdd,
+                    modifier = Modifier.size(52.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Artikel hinzufügen",
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Opens the paste-and-preview sheet; looks like a field so it reads as input. */
 @Composable
 private fun PasteField(onClick: () -> Unit) {
     Surface(
@@ -255,16 +389,17 @@ private fun PasteField(onClick: () -> Unit) {
                 imageVector = Icons.Default.List,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Ganze Liste einfügen",
+                    text = "Liste oder Rezept-Link einfügen",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
                     text = "wird erkannt und nach Supermarkt sortiert",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -284,12 +419,16 @@ private fun ListMenu(
     checkedCount: Int,
     totalCount: Int,
     onDeleteChecked: () -> Unit,
-    onClearAllRequest: () -> Unit,
+    onClearRequest: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     IconButton(onClick = { expanded = true }) {
-        Icon(Icons.Default.MoreVert, contentDescription = "Weitere Aktionen")
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = "Weitere Aktionen",
+            modifier = Modifier.size(28.dp),
+        )
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         DropdownMenuItem(
@@ -305,7 +444,7 @@ private fun ListMenu(
             enabled = totalCount > 0,
             onClick = {
                 expanded = false
-                onClearAllRequest()
+                onClearRequest()
             },
         )
     }
@@ -318,7 +457,7 @@ private fun SectionHeader(title: String, trailing: String) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+                    .padding(start = 16.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -358,7 +497,7 @@ private fun ItemRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onClick)
-                .padding(vertical = 14.dp),
+                .padding(vertical = 18.dp),
         ) {
             Text(
                 text = item.name,
@@ -386,6 +525,7 @@ private fun ItemRow(
                 Icons.Default.Delete,
                 contentDescription = "„${item.name}“ löschen",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(26.dp),
             )
         }
     }
@@ -401,14 +541,14 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Default.ShoppingCart,
             contentDescription = null,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(72.dp),
             tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(16.dp))
         Text(text = "Liste ist leer", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
-            text = "Oben eine ganze Liste einfügen, oder unten einzelne Artikel hinzufügen.",
+            text = "Unten einen Artikel eintippen, oder oben eine ganze Liste einfügen.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -441,25 +581,29 @@ private fun ShoppingListScreenPreview() {
         ShoppingItem(id = 1, name = "Tomaten", quantity = "500 g", category = Category.OBST_GEMUESE),
         ShoppingItem(id = 2, name = "Vollkornbrot", category = Category.BACKWAREN),
         ShoppingItem(id = 3, name = "Feta", category = Category.MOLKEREI),
-        ShoppingItem(id = 4, name = "Hackfleisch", quantity = "500 g", category = Category.FLEISCH_FISCH),
-        ShoppingItem(id = 5, name = "Spülmittel", category = Category.HAUSHALT, isChecked = true),
+        ShoppingItem(id = 4, name = "Spülmittel", category = Category.HAUSHALT, isChecked = true),
     )
     EinkaufslisteTheme(dynamicColor = false) {
         ShoppingListScreen(
             uiState = ShoppingListUiState(
                 rows = ShoppingListGrouper.group(items),
-                openCount = 4,
+                openCount = 3,
                 checkedCount = 1,
                 isLoading = false,
             ),
+            listName = "Einkaufsliste",
+            quickAdd = QuickAddState(text = "Milch", suggested = Category.MOLKEREI, recognized = true),
             snackbarHostState = remember { SnackbarHostState() },
+            onTitleClick = {},
             onPasteClick = {},
-            onAddClick = {},
+            onQuickAddChange = {},
+            onQuickAddSubmit = {},
+            onQuickAddExpand = {},
             onItemClick = {},
             onToggle = {},
             onDelete = {},
             onDeleteChecked = {},
-            onDeleteAll = {},
+            onClearList = {},
         )
     }
 }
