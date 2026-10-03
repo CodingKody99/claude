@@ -66,6 +66,7 @@ data class RecipeEditorState(
     val editing: Recipe? = null,
     val name: String = "",
     val ingredientsText: String = "",
+    val steps: String = "",
     val sourceUrl: String? = null,
     val loading: Boolean = false,
     val error: String? = null,

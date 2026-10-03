@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [ShoppingItem::class, CategoryOverride::class, ShoppingList::class, Recipe::class],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -83,6 +83,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the method text to a recipe. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `recipes` ADD COLUMN `steps` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         /** A fresh install has no migration to seed the first list, so do it here. */
         private val seedFirstList = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -104,7 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .addCallback(seedFirstList)
                     .build()
                     .also { instance = it }

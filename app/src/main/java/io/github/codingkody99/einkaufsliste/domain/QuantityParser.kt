@@ -12,9 +12,18 @@ object QuantityParser {
 
     /** The amount in display form (empty when there is none) and the rest. */
     fun split(fragment: String): Pair<String, String> {
-        leading(fragment)?.let { return it }
-        trailing(fragment)?.let { return it }
+        // Dictation says "zwei Tomaten" where typing says "2 Tomaten".
+        val withDigits = spellOutToDigit(fragment)
+        leading(withDigits)?.let { return it }
+        trailing(withDigits)?.let { return it }
         return "" to fragment
+    }
+
+    /** Rewrites a leading German number word as a digit, if there is one. */
+    private fun spellOutToDigit(fragment: String): String {
+        val match = FIRST_WORD.find(fragment.trimStart()) ?: return fragment
+        val digit = NUMBER_WORDS[match.groupValues[1].lowercase()] ?: return fragment
+        return digit.toString() + fragment.trimStart().substring(match.range.last + 1)
     }
 
     /** True for text that is nothing but an amount, like "1 l" or "2 Packungen". */
@@ -69,6 +78,12 @@ object QuantityParser {
         if (raw.isEmpty()) null else UNITS[raw.lowercase().trimEnd('.')]
 
     private val TIMES = setOf("x", "×")
+
+    private val NUMBER_WORDS: Map<String, Int> = mapOf(
+        "zwei" to 2, "drei" to 3, "vier" to 4, "fünf" to 5, "fuenf" to 5,
+        "sechs" to 6, "sieben" to 7, "acht" to 8, "neun" to 9, "zehn" to 10,
+        "elf" to 11, "zwölf" to 12, "zwoelf" to 12,
+    )
 
     private val UNITS: Map<String, String> = buildMap {
         fun unit(display: String, vararg spellings: String) =

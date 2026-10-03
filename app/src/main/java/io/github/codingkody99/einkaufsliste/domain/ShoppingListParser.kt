@@ -16,6 +16,7 @@ import io.github.codingkody99.einkaufsliste.data.Category
  */
 class ShoppingListParser(
     private val classifier: CategoryClassifier = CategoryClassifier(),
+    private val segmenter: ItemSegmenter = ItemSegmenter(classifier),
 ) {
 
     fun parse(text: String, overrides: Map<String, Category> = emptyMap()): List<ParsedEntry> {
@@ -63,7 +64,7 @@ class ShoppingListParser(
         }
 
         splitFragments(body).forEach { fragment ->
-            toEntry(fragment, line, overrides)?.let { into += it }
+            into += toEntries(fragment, line, overrides)
         }
     }
 
@@ -92,38 +93,47 @@ class ShoppingListParser(
         return entry(cleanName(stripMarkers(rawName)), amount, sourceLine, overrides, heading = false)
     }
 
-    private fun toEntry(
+    private fun toEntries(
         fragment: String,
         sourceLine: String,
         overrides: Map<String, Category>,
-    ): ParsedEntry? {
+    ): List<ParsedEntry> {
         val cleaned = stripMarkers(fragment.trim())
-        if (cleaned.isEmpty()) return null
+        if (cleaned.isEmpty()) return emptyList()
 
-        // "Ich will Sommerrollen kochen" names the dish, not something to buy.
-        dishName(cleaned)?.let { dish ->
-            return entry(cleanName(dish), "", sourceLine, overrides, heading = true)
+        // The sentence around the items goes first, so that what is left can be
+        // read as a plain list — and so "dafür brauche ich 2 Karotten" does not
+        // hide its own "2" behind the lead-in.
+        val spoken = stripSpokenFiller(cleaned)
+        if (spoken.isEmpty()) return emptyList()
+
+        // "Sommerrollen machen" names the dish, not something to buy.
+        dishName(spoken)?.let { dish ->
+            return listOf(entry(cleanName(dish), "", sourceLine, overrides, heading = true))
         }
 
-        // Spoken input carries the sentence around the item: strip it before the
-        // amount is read, or "dafür brauche ich 2 Karotten" hides its own "2".
-        val spoken = stripSpokenFiller(cleaned)
-        if (spoken.isEmpty()) return null
-        // "500 g" or "2 x" on its own carries no item.
-        if (QuantityParser.isPureQuantity(spoken)) return null
+        return segmenter.segment(spoken, overrides).mapNotNull { piece ->
+            // "500 g" or "2 x" on its own carries no item.
+            if (QuantityParser.isPureQuantity(piece)) return@mapNotNull null
 
-        val (quantity, remainder) = QuantityParser.split(spoken)
-        val name = cleanName(remainder)
-        if (name.none { it.isLetter() }) return null
+            val (quantity, remainder) = QuantityParser.split(piece)
+            val name = cleanName(remainder)
+            if (name.none { it.isLetter() }) return@mapNotNull null
 
-        return entry(name, quantity, sourceLine, overrides, heading = false)
+            entry(name, quantity, sourceLine, overrides, heading = false)
+        }
     }
 
-    /** The dish in "ich will X kochen" / "wir machen heute X", if that is the shape. */
+    /**
+     * The dish in "ich will X kochen" / "wir machen heute X", if that is the shape.
+     *
+     * A phrase ending in a preposition is not a dish: "Butter zum Braten" says
+     * what the butter is for, not that butter is being cooked.
+     */
     private fun dishName(text: String): String? = DISH_SENTENCES
         .firstNotNullOfOrNull { it.find(text)?.groupValues?.get(1) }
         ?.trim()
-        ?.takeIf { it.isNotBlank() }
+        ?.takeIf { it.isNotBlank() && !PURPOSE_WORD_AT_END.containsMatchIn(it) }
 
     /** Removes conversational lead-ins, however many are stacked up. */
     private fun stripSpokenFiller(text: String): String {
@@ -204,6 +214,7 @@ class ShoppingListParser(
         /** Leading words that say "some" rather than how much. */
         val VAGUE_PREFIX = Regex(
             "^(?:etwas|etw\\.?|evtl\\.?|eventuell|ca\\.?|ggf\\.?|ein wenig|ein paar|" +
+                "ein|eine|einen|einem|einer|" +
                 "nach belieben|nach geschmack|n\\.\\s*b\\.?)(?:\\s+|$)",
             RegexOption.IGNORE_CASE,
         )
@@ -222,19 +233,31 @@ class ShoppingListParser(
          * Sentences that announce a dish. The cooking verb is required, so
          * "ich will Milch" stays an item while "ich will Suppe kochen" does not.
          */
+        private const val COOKING_VERBS =
+            "koche|kochen|mache|machen|backe|backen|zubereite|zubereiten|grille|grillen|brate|braten"
+
+        /** A dish never ends on a preposition; a purpose phrase does. */
+        val PURPOSE_WORD_AT_END = Regex(
+            "\\s(?:zum|zur|zu|für|fürs|fuer|fuers)$",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /**
+         * Shapes that announce a dish. Checked after the lead-in is stripped, so
+         * "ich würde gerne X machen" has already become "X machen". A cooking
+         * verb is required, which keeps "ich will Milch" an item.
+         */
         val DISH_SENTENCES = listOf(
+            // "Sommerrollen machen"
+            Regex("^(.+?)\\s+(?:$COOKING_VERBS)$", RegexOption.IGNORE_CASE),
+            // "kochen heute Lasagne"
             Regex(
-                "^(?:ich|wir)\\s+(?:will|wollen|möchte|möchten|werde|werden)\\s+(.+?)\\s+" +
-                    "(?:kochen|machen|backen|zubereiten|grillen|braten)$",
+                "^(?:$COOKING_VERBS)\\s+(?:heute|morgen|gleich|nachher|später)?\\s*(.+)$",
                 RegexOption.IGNORE_CASE,
             ),
+            // "für Sommerrollen brauche ich"
             Regex(
-                "^(?:ich|wir)\\s+(?:koche|kochen|backe|backen|mache|machen|grille|grillen)\\s+" +
-                    "(?:heute|morgen|gleich|nachher)?\\s*(.+?)$",
-                RegexOption.IGNORE_CASE,
-            ),
-            Regex(
-                "^für\\s+(.+?)\\s+(?:brauche|brauchen|benötige|benötigen)\\s+(?:ich|wir)$",
+                "^für\\s+(.+?)\\s+(?:brauche|brauchen|benötige|benötigen)(?:\\s+(?:ich|wir))?$",
                 RegexOption.IGNORE_CASE,
             ),
         )
@@ -246,6 +269,7 @@ class ShoppingListParser(
         val SPOKEN_PREFIX = Regex(
             "^(?:" +
                 "und|dann|danach|außerdem|ausserdem|auch|noch|bitte|also|dafür|dazu|ach ja|ach" +
+                "|gerne|gern|unbedingt|vielleicht|eventuell|glaube ich" +
                 "|ich|wir" +
                 "|brauche|brauchen|bräuchte|bräuchten|benötige|benötigen" +
                 "|will|wollen|möchte|möchten|würde|würden|werde|werden|hätte|hätten" +

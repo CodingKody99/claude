@@ -99,6 +99,9 @@ class ShoppingListViewModel(
     private val _recipesVisible = MutableStateFlow(false)
     val recipesVisible: StateFlow<Boolean> = _recipesVisible.asStateFlow()
 
+    private val _viewedRecipe = MutableStateFlow<Recipe?>(null)
+    val viewedRecipe: StateFlow<Recipe?> = _viewedRecipe.asStateFlow()
+
     private val _recipeEditor = MutableStateFlow(RecipeEditorState())
     val recipeEditor: StateFlow<RecipeEditorState> = _recipeEditor.asStateFlow()
 
@@ -189,12 +192,22 @@ class ShoppingListViewModel(
         _recipeEditor.value = RecipeEditorState(visible = true)
     }
 
+    fun viewRecipe(recipe: Recipe) {
+        _viewedRecipe.value = recipe
+    }
+
+    fun dismissRecipeView() {
+        _viewedRecipe.value = null
+    }
+
     fun startEditRecipe(recipe: Recipe) {
+        _viewedRecipe.value = null
         _recipeEditor.value = RecipeEditorState(
             visible = true,
             editing = recipe,
             name = recipe.name,
             ingredientsText = recipe.ingredientsText,
+            steps = recipe.steps,
             sourceUrl = recipe.sourceUrl,
         )
     }
@@ -207,6 +220,28 @@ class ShoppingListViewModel(
 
     fun onRecipeIngredientsChange(value: String) = _recipeEditor.update {
         it.copy(ingredientsText = value, error = null)
+    }
+
+    fun onRecipeStepsChange(value: String) = _recipeEditor.update {
+        it.copy(steps = value, error = null)
+    }
+
+    /** Appends scanned or dictated text to the method, keeping what is there. */
+    fun onRecipeStepsAppended(text: String) {
+        if (text.isBlank()) return
+        _recipeEditor.update { it.copy(steps = appendLines(it.steps, listOf(text.trim())), error = null) }
+    }
+
+    /**
+     * Text from a photo lands in the ingredients field as it was read, line by
+     * line, so it can be corrected rather than retyped.
+     */
+    fun onRecipeIngredientsScanned(text: String) {
+        if (text.isBlank()) return
+        val lines = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        _recipeEditor.update {
+            it.copy(ingredientsText = appendLines(it.ingredientsText, lines), error = null)
+        }
     }
 
     /**
@@ -273,10 +308,20 @@ class ShoppingListViewModel(
         val editing = state.editing
         viewModelScope.launch {
             if (editing == null) {
-                repository.saveRecipe(state.name, state.ingredientsText, state.sourceUrl)
+                repository.saveRecipe(
+                    name = state.name,
+                    ingredientsText = state.ingredientsText,
+                    steps = state.steps,
+                    sourceUrl = state.sourceUrl,
+                )
                 emitNotice("Rezept „${state.name.trim()}“ gespeichert", undo = null)
             } else {
-                repository.updateRecipe(editing, state.name, state.ingredientsText)
+                repository.updateRecipe(
+                    recipe = editing,
+                    name = state.name,
+                    ingredientsText = state.ingredientsText,
+                    steps = state.steps,
+                )
             }
         }
         dismissRecipeEditor()
@@ -294,6 +339,7 @@ class ShoppingListViewModel(
      * ingredients to the list goes through exactly the same check and undo.
      */
     fun useRecipe(recipe: Recipe) {
+        _viewedRecipe.value = null
         dismissRecipes()
         _import.value = ImportState(visible = true, text = recipe.ingredientsText)
         viewModelScope.launch {

@@ -11,13 +11,15 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   zerlegt ihn in einzelne Artikel, erkennt Mengen und sortiert alles nach
   Supermarkt-Reihenfolge. Vor dem Übernehmen gibt es eine **Vorschau**, in der jede
   Zeile abgewählt oder umsortiert werden kann.
-- **Diktieren**: statt zu tippen einfach sagen, was gebraucht wird — „Ich will
-  Sommerrollen kochen, dafür brauche ich Reisnudeln, Karotte, Gurke, Tofu" wird zum
-  Gericht als Überschrift plus vier einsortierten Artikeln. Satzfüller wie „dafür
-  brauche ich" fallen dabei weg
-- **Rezeptbuch** über das 🍳-Symbol oben: Rezepte eintippen, per Link laden oder
-  diktieren und speichern. Ein Tipp auf ein Rezept öffnet die Zutaten in derselben
-  Vorschau wie der Freitext-Import — von dort gehen sie auf die aktuelle Liste
+- **Diktieren**: statt zu tippen einfach sagen, was gebraucht wird — „Ich würde
+  gerne Sommerrollen machen und brauche dafür Karotten, einen Tofu eine Gurke,
+  Reispapier Reisnudeln" wird zum Gericht als Überschrift plus fünf einsortierten
+  Artikeln. Satzfüller fallen weg, und da Spracherkennung keine Kommas setzt,
+  werden auch Wortketten ohne Satzzeichen in einzelne Artikel zerlegt
+- **Rezeptbuch** über das 🍳-Symbol oben: Rezepte eintippen, per Link laden,
+  diktieren oder **vom Foto scannen** — für Rezepte auf Papier. Dazu ein Feld für
+  den Ablauf. Ein Tipp auf ein Rezept öffnet es zum Lesen; von dort gehen die
+  Zutaten über dieselbe Vorschau wie der Freitext-Import auf die aktuelle Liste
 - **Rezept-Link einfügen**: statt Text einen Link zu einer Rezeptseite einwerfen —
   die Zutatenliste wird geladen und läuft durch dieselbe Erkennung und dieselbe
   Vorschau. Rezeptangaben wie „3 Ei(er)", „etwas Butter zum Braten" oder
@@ -153,6 +155,7 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── CategoryClassifier.kt     Zuordnung inkl. Kompositum- und TK-Regeln
 │   ├── QuantityParser.kt         „500g", „2x", „1/2", „Milch 1 l"
 │   ├── ShoppingListParser.kt     Freitext → Artikel
+│   ├── ItemSegmenter.kt          Wortketten ohne Satzzeichen trennen
 │   ├── UrlDetector.kt            findet einen Link im eingefügten Text
 │   ├── HtmlText.kt               HTML-Entities und Tags
 │   ├── RecipeExtractor.kt        schema.org-Zutaten aus einer Seite
@@ -166,7 +169,9 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
     ├── ListSwitcherSheet.kt      Listen wechseln, anlegen, umbenennen
     ├── RecipesSheet.kt           gespeicherte Rezepte
     ├── RecipeEditorSheet.kt      Rezept eintippen, laden oder diktieren
+    ├── RecipeViewSheet.kt        Rezept lesen
     ├── DictateButton.kt          Spracheingabe über den System-Erkenner
+    ├── ScanPhotoButton.kt        Texterkennung im Gerät (ML Kit)
     ├── ImportSheet.kt            Einfügen und Vorschau
     ├── ItemEditorSheet.kt
     └── theme/                    Farben und Typografie
@@ -205,8 +210,12 @@ Abgedeckt sind unter anderem:
 - **Schnelleingabe**: Kategorie beim Tippen, Hinzufügen und Leeren des Felds,
   Übergabe des Getippten an den vollen Editor
 - **Gesprochene Sätze**: Satzfüller („und dann brauche ich noch"), Gericht-Sätze
-  („ich will X kochen" gegen „ich will Milch"), Mengen in gesprochener Form, und
-  dass Artikelnamen wie „Brauner Zucker" nicht für Füllwörter gehalten werden
+  („ich will X kochen" gegen „ich will Milch", und „Butter zum Braten" bleibt ein
+  Artikel), gesprochene Zahlwörter, und dass Artikelnamen wie „Brauner Zucker"
+  nicht für Füllwörter gehalten werden
+- **Wortketten ohne Satzzeichen**: „einen Tofu eine Gurke" wird getrennt,
+  „Rote Bete" und „Brauner Zucker" nicht, und ein nachgestelltes „Milch 1 l"
+  verliert seine Menge nicht
 - **Rezeptbuch**: Speichern, Bearbeiten, Löschen, Laden aus einem Link,
   Diktieren mit Name aus dem Gericht, Übernahme auf die Liste samt
   Duplikatprüfung — und dass ein Rezept bei jeder Nutzung neu eingeordnet wird,
@@ -229,3 +238,4 @@ Abgedeckt sind unter anderem:
 | Build | Gradle 8.9, Android Gradle Plugin 8.5.2, JDK 17 |
 | minSdk / targetSdk | 26 / 34 |
 | Spracheingabe | `RecognizerIntent` des Systems, ohne Mikrofon-Berechtigung |
+| Texterkennung | ML Kit Text Recognition, auf dem Gerät, ohne Netz |

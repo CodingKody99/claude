@@ -45,6 +45,7 @@ import io.github.codingkody99.einkaufsliste.data.Recipe
 @Composable
 fun RecipesSheet(
     recipes: List<Recipe>,
+    onOpen: (Recipe) -> Unit,
     onUse: (Recipe) -> Unit,
     onCreate: () -> Unit,
     onEdit: (Recipe) -> Unit,
@@ -66,7 +67,7 @@ fun RecipesSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 4.dp),
             )
             Text(
-                text = "Antippen, um die Zutaten auf die Einkaufsliste zu übernehmen.",
+                text = "Antippen zum Ansehen — die Zutaten gehen von dort auf die Liste.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
@@ -84,6 +85,7 @@ fun RecipesSheet(
                 recipes.forEach { recipe ->
                     RecipeRow(
                         recipe = recipe,
+                        onOpen = { onOpen(recipe) },
                         onUse = { onUse(recipe) },
                         onEdit = { onEdit(recipe) },
                         onDelete = { onDelete(recipe) },
@@ -112,6 +114,7 @@ fun RecipesSheet(
 @Composable
 private fun RecipeRow(
     recipe: Recipe,
+    onOpen: () -> Unit,
     onUse: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -121,7 +124,7 @@ private fun RecipeRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onUse)
+            .clickable(onClick = onOpen)
             .padding(start = 24.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -145,6 +148,13 @@ private fun RecipeRow(
             Icon(Icons.Default.MoreVert, contentDescription = "Rezept „${recipe.name}“ bearbeiten")
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Zutaten auf die Liste") },
+                onClick = {
+                    menuOpen = false
+                    onUse()
+                },
+            )
             DropdownMenuItem(
                 text = { Text("Bearbeiten") },
                 onClick = {

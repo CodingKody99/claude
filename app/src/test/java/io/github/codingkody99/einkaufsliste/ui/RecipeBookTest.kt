@@ -142,7 +142,7 @@ class RecipeBookTest {
     @Test
     fun `an existing recipe can be edited`() = runTest(dispatcher) {
         val recipes = collectRecipes()
-        repository.saveRecipe("Sommerrollen", "Reisnudeln\nTofu", null)
+        repository.saveRecipe("Sommerrollen", "Reisnudeln\nTofu", "", null)
         advanceUntilIdle()
 
         viewModel.startEditRecipe(recipes().single())
@@ -159,9 +159,119 @@ class RecipeBookTest {
     }
 
     @Test
+    fun `the method text is saved with the recipe`() = runTest(dispatcher) {
+        val recipes = collectRecipes()
+        advanceUntilIdle()
+
+        viewModel.startCreateRecipe()
+        viewModel.onRecipeNameChange("Sommerrollen")
+        viewModel.onRecipeIngredientsChange("Reisnudeln\nTofu")
+        viewModel.onRecipeStepsChange("1. Reispapier einweichen\n2. Füllen und rollen")
+        viewModel.saveRecipe()
+        advanceUntilIdle()
+
+        assertEquals("1. Reispapier einweichen\n2. Füllen und rollen", recipes().single().steps)
+    }
+
+    @Test
+    fun `a recipe without a method is still valid`() = runTest(dispatcher) {
+        val recipes = collectRecipes()
+        advanceUntilIdle()
+
+        viewModel.startCreateRecipe()
+        viewModel.onRecipeNameChange("Sommerrollen")
+        viewModel.onRecipeIngredientsChange("Reisnudeln")
+        assertTrue(viewModel.recipeEditor.value.canSave)
+        viewModel.saveRecipe()
+        advanceUntilIdle()
+
+        assertEquals("", recipes().single().steps)
+    }
+
+    @Test
+    fun `editing keeps the method text and can change it`() = runTest(dispatcher) {
+        val recipes = collectRecipes()
+        repository.saveRecipe("Sommerrollen", "Reisnudeln", "Erst einweichen", null)
+        advanceUntilIdle()
+
+        viewModel.startEditRecipe(recipes().single())
+        assertEquals("Erst einweichen", viewModel.recipeEditor.value.steps)
+        viewModel.onRecipeStepsChange("Erst einweichen, dann rollen")
+        viewModel.saveRecipe()
+        advanceUntilIdle()
+
+        assertEquals("Erst einweichen, dann rollen", recipes().single().steps)
+    }
+
+    @Test
+    fun `scanned text is appended to the ingredients line by line`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.startCreateRecipe()
+        viewModel.onRecipeIngredientsChange("Reisnudeln")
+
+        viewModel.onRecipeIngredientsScanned("  Karotte  \n\n  Gurke \n")
+
+        assertEquals(
+            listOf("Reisnudeln", "Karotte", "Gurke"),
+            viewModel.recipeEditor.value.ingredientsText.split('\n'),
+        )
+    }
+
+    @Test
+    fun `scanned text is appended to the method`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.startCreateRecipe()
+        viewModel.onRecipeStepsChange("Schritt 1")
+
+        viewModel.onRecipeStepsAppended("Schritt 2")
+
+        assertEquals("Schritt 1\nSchritt 2", viewModel.recipeEditor.value.steps)
+    }
+
+    @Test
+    fun `scanning nothing changes nothing`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.startCreateRecipe()
+        viewModel.onRecipeIngredientsScanned("   ")
+        viewModel.onRecipeStepsAppended("")
+
+        assertEquals("", viewModel.recipeEditor.value.ingredientsText)
+        assertEquals("", viewModel.recipeEditor.value.steps)
+    }
+
+    @Test
+    fun `a recipe opens for reading and leads on to the list`() = runTest(dispatcher) {
+        val recipes = collectRecipes()
+        repository.saveRecipe("Sommerrollen", "Reisnudeln\nTofu", "Rollen", null)
+        advanceUntilIdle()
+
+        viewModel.viewRecipe(recipes().single())
+        assertEquals("Sommerrollen", viewModel.viewedRecipe.value?.name)
+
+        viewModel.useRecipe(recipes().single())
+        advanceUntilIdle()
+
+        assertNull("Die Leseansicht schließt sich", viewModel.viewedRecipe.value)
+        assertTrue(viewModel.import.value.visible)
+    }
+
+    @Test
+    fun `editing from the reading view closes it`() = runTest(dispatcher) {
+        val recipes = collectRecipes()
+        repository.saveRecipe("Sommerrollen", "Reisnudeln", "", null)
+        advanceUntilIdle()
+
+        viewModel.viewRecipe(recipes().single())
+        viewModel.startEditRecipe(recipes().single())
+
+        assertNull(viewModel.viewedRecipe.value)
+        assertTrue(viewModel.recipeEditor.value.visible)
+    }
+
+    @Test
     fun `a recipe can be deleted`() = runTest(dispatcher) {
         val recipes = collectRecipes()
-        repository.saveRecipe("Sommerrollen", "Reisnudeln", null)
+        repository.saveRecipe("Sommerrollen", "Reisnudeln", "", null)
         advanceUntilIdle()
 
         viewModel.deleteRecipe(recipes().single())
@@ -173,8 +283,8 @@ class RecipeBookTest {
     @Test
     fun `recipes are listed by name`() = runTest(dispatcher) {
         val recipes = collectRecipes()
-        repository.saveRecipe("Zwiebelkuchen", "Zwiebeln", null)
-        repository.saveRecipe("Apfelkuchen", "Äpfel", null)
+        repository.saveRecipe("Zwiebelkuchen", "Zwiebeln", "", null)
+        repository.saveRecipe("Apfelkuchen", "Äpfel", "", null)
         advanceUntilIdle()
 
         assertEquals(listOf("Apfelkuchen", "Zwiebelkuchen"), recipes().map { it.name })
@@ -332,7 +442,7 @@ class RecipeBookTest {
     @Test
     fun `using a recipe opens the import preview, categorised and sorted`() = runTest(dispatcher) {
         val recipes = collectRecipes()
-        repository.saveRecipe("Sommerrollen", "Reisnudeln\nKarotte\nGurke\nTofu", null)
+        repository.saveRecipe("Sommerrollen", "Reisnudeln\nKarotte\nGurke\nTofu", "", null)
         advanceUntilIdle()
 
         viewModel.openRecipes()
@@ -357,7 +467,7 @@ class RecipeBookTest {
     fun `the ingredients land on the current list once confirmed`() = runTest(dispatcher) {
         val state = collectUiState()
         val recipes = collectRecipes()
-        repository.saveRecipe("Sommerrollen", "Reisnudeln\nKarotte\nTofu", null)
+        repository.saveRecipe("Sommerrollen", "Reisnudeln\nKarotte\nTofu", "", null)
         advanceUntilIdle()
 
         viewModel.useRecipe(recipes().single())
@@ -377,7 +487,7 @@ class RecipeBookTest {
         collectUiState()
         val recipes = collectRecipes()
         repository.add(ShoppingList.DEFAULT_ID, NewItem("Tofu", category = Category.MOLKEREI))
-        repository.saveRecipe("Sommerrollen", "Reisnudeln\nTofu", null)
+        repository.saveRecipe("Sommerrollen", "Reisnudeln\nTofu", "", null)
         advanceUntilIdle()
 
         viewModel.useRecipe(recipes().single())
@@ -391,7 +501,7 @@ class RecipeBookTest {
     @Test
     fun `a recipe keeps its wording and is re-read each time it is used`() = runTest(dispatcher) {
         val recipes = collectRecipes()
-        repository.saveRecipe("Test", "Yuzu", null)
+        repository.saveRecipe("Test", "Yuzu", "", null)
         advanceUntilIdle()
 
         // Unknown at first ...

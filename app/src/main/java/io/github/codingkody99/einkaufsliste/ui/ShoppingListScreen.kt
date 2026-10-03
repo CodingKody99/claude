@@ -86,6 +86,7 @@ fun ShoppingListRoute(
     val recipes by viewModel.recipes.collectAsStateWithLifecycle()
     val recipesVisible by viewModel.recipesVisible.collectAsStateWithLifecycle()
     val recipeEditor by viewModel.recipeEditor.collectAsStateWithLifecycle()
+    val viewedRecipe by viewModel.viewedRecipe.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     NoticeSnackbarEffect(
@@ -161,6 +162,7 @@ fun ShoppingListRoute(
     if (recipesVisible) {
         RecipesSheet(
             recipes = recipes,
+            onOpen = viewModel::viewRecipe,
             onUse = viewModel::useRecipe,
             onCreate = viewModel::startCreateRecipe,
             onEdit = viewModel::startEditRecipe,
@@ -169,12 +171,24 @@ fun ShoppingListRoute(
         )
     }
 
+    viewedRecipe?.let { recipe ->
+        RecipeViewSheet(
+            recipe = recipe,
+            onUse = { viewModel.useRecipe(recipe) },
+            onEdit = { viewModel.startEditRecipe(recipe) },
+            onDismiss = viewModel::dismissRecipeView,
+        )
+    }
+
     if (recipeEditor.visible) {
         RecipeEditorSheet(
             state = recipeEditor,
             onNameChange = viewModel::onRecipeNameChange,
             onIngredientsChange = viewModel::onRecipeIngredientsChange,
+            onStepsChange = viewModel::onRecipeStepsChange,
             onDictated = viewModel::onRecipeDictated,
+            onIngredientsScanned = viewModel::onRecipeIngredientsScanned,
+            onStepsScanned = viewModel::onRecipeStepsAppended,
             onLoadLink = viewModel::loadRecipeIntoEditor,
             onSave = viewModel::saveRecipe,
             onDismiss = viewModel::dismissRecipeEditor,

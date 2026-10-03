@@ -61,9 +61,19 @@ interface ShoppingRepository {
     fun observeRecipes(): Flow<List<Recipe>>
 
     /** Returns the new id, or null when name or ingredients were blank. */
-    suspend fun saveRecipe(name: String, ingredientsText: String, sourceUrl: String?): Long?
+    suspend fun saveRecipe(
+        name: String,
+        ingredientsText: String,
+        steps: String,
+        sourceUrl: String?,
+    ): Long?
 
-    suspend fun updateRecipe(recipe: Recipe, name: String, ingredientsText: String)
+    suspend fun updateRecipe(
+        recipe: Recipe,
+        name: String,
+        ingredientsText: String,
+        steps: String,
+    )
 
     suspend fun deleteRecipe(id: Long)
 
@@ -178,6 +188,7 @@ class RoomShoppingRepository(
     override suspend fun saveRecipe(
         name: String,
         ingredientsText: String,
+        steps: String,
         sourceUrl: String?,
     ): Long? {
         val cleanName = name.trim()
@@ -188,17 +199,27 @@ class RoomShoppingRepository(
                 name = cleanName,
                 sourceUrl = sourceUrl?.trim()?.takeIf { it.isNotEmpty() },
                 ingredientsText = lines.joinToString("\n"),
+                steps = steps.trim(),
                 createdAt = now(),
             ),
         )
     }
 
-    override suspend fun updateRecipe(recipe: Recipe, name: String, ingredientsText: String) {
+    override suspend fun updateRecipe(
+        recipe: Recipe,
+        name: String,
+        ingredientsText: String,
+        steps: String,
+    ) {
         val cleanName = name.trim()
         val lines = cleanLines(ingredientsText)
         if (cleanName.isEmpty() || lines.isEmpty()) return
         recipeDao.update(
-            recipe.copy(name = cleanName, ingredientsText = lines.joinToString("\n")),
+            recipe.copy(
+                name = cleanName,
+                ingredientsText = lines.joinToString("\n"),
+                steps = steps.trim(),
+            ),
         )
     }
 

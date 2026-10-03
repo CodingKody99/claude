@@ -64,6 +64,9 @@ dependencies {
 
     implementation(libs.kotlinx.serialization.json)
 
+    // On-device text recognition: no API key, no network, works offline.
+    implementation(libs.mlkit.text.recognition)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

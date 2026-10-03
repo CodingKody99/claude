@@ -38,7 +38,10 @@ fun RecipeEditorSheet(
     state: RecipeEditorState,
     onNameChange: (String) -> Unit,
     onIngredientsChange: (String) -> Unit,
+    onStepsChange: (String) -> Unit,
     onDictated: (String) -> Unit,
+    onIngredientsScanned: (String) -> Unit,
+    onStepsScanned: (String) -> Unit,
     onLoadLink: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
@@ -60,9 +63,8 @@ fun RecipeEditorSheet(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Zutaten eintippen, einen Rezept-Link einfügen oder diktieren — " +
-                    "zum Beispiel „Ich will Sommerrollen kochen, dafür brauche ich " +
-                    "Reisnudeln, Karotte, Gurke, Tofu“.",
+                text = "Eintippen, einen Rezept-Link einfügen, diktieren oder ein Foto " +
+                    "des Rezepts scannen.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -98,6 +100,48 @@ fun RecipeEditorSheet(
                     .weight(1f),
             )
 
+            Spacer(Modifier.height(8.dp))
+
+            if (!state.loading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    DictateButton(
+                        onText = onDictated,
+                        label = "Diktieren",
+                        prompt = "Sag, was in das Rezept gehört",
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    ScanPhotoButton(onText = onIngredientsScanned, label = "Foto")
+                    if (state.detectedUrl != null) {
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = onLoadLink) { Text("Link") }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = state.steps,
+                onValueChange = onStepsChange,
+                label = { Text("Ablauf (optional)") },
+                placeholder = {
+                    Text(
+                        text = "1. Gemüse waschen und schneiden\n2. Nudeln kochen …",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                enabled = !state.loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            if (!state.loading) {
+                ScanPhotoButton(onText = onStepsScanned, label = "Ablauf vom Foto")
+            }
+
             state.error?.let { message ->
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -110,21 +154,11 @@ fun RecipeEditorSheet(
             Spacer(Modifier.height(12.dp))
 
             if (state.loading) {
+                Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(12.dp))
                     Text("Rezept wird geladen …", style = MaterialTheme.typography.bodyMedium)
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    DictateButton(
-                        onText = onDictated,
-                        prompt = "Sag, was in das Rezept gehört",
-                    )
-                    if (state.detectedUrl != null) {
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = onLoadLink) { Text("Link laden") }
-                    }
                 }
             }
 

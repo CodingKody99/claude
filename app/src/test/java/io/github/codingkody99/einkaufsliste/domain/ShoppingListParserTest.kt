@@ -169,6 +169,55 @@ class ShoppingListParserTest {
     }
 
     @Test
+    fun `the dictated line from the phone is broken down correctly`() {
+        // Exactly what speech recognition produced on the device: no commas
+        // between the items, and a sentence wrapped around the first one.
+        val spoken = """
+            ich würde gerne Sommerrollen machen und brauche dafür Karotten
+            einen Tofu eine Gurke
+            Reispapier Reisnudeln
+        """.trimIndent()
+
+        val parsed = parser.parse(spoken)
+
+        assertEquals("Sommerrollen", parsed.single { it.isHeading }.name)
+        assertEquals(
+            listOf("Karotten", "Tofu", "Gurke", "Reispapier", "Reisnudeln"),
+            parsed.filterNot { it.isHeading }.map { it.name },
+        )
+        assertEquals(
+            listOf(OBST_GEMUESE, MOLKEREI, OBST_GEMUESE, VORRAT, VORRAT),
+            parsed.filterNot { it.isHeading }.map { it.category },
+        )
+    }
+
+    @Test
+    fun `dictated items without punctuation become separate entries`() {
+        assertEquals(listOf("Milch", "Brot", "Tomaten"), names("Milch Brot Tomaten"))
+        assertEquals(listOf("Tofu", "Gurke"), names("einen Tofu eine Gurke"))
+    }
+
+    @Test
+    fun `indefinite articles are dropped from the name`() {
+        assertEquals(listOf("Gurke"), names("eine Gurke"))
+        assertEquals(listOf("Brot"), names("ein Brot"))
+    }
+
+    @Test
+    fun `spoken numbers become amounts`() {
+        val entries = items("zwei Tomaten drei Gurken")
+        assertEquals(listOf("Tomaten", "Gurken"), entries.map { it.name })
+        assertEquals(listOf("2", "3"), entries.map { it.quantity })
+    }
+
+    @Test
+    fun `more ways of announcing a dish`() {
+        assertEquals("Sommerrollen", parser.parse("ich würde gerne Sommerrollen machen").single().name)
+        assertEquals("Lasagne", parser.parse("ich möchte gern Lasagne kochen").single().name)
+        assertEquals("Pfannkuchen", parser.parse("Pfannkuchen backen").single().name)
+    }
+
+    @Test
     fun `every item is filed into its supermarket section`() {
         val parsed = items("Tomaten\nBrot\nMilch\nHackfleisch\nNudeln")
         assertEquals(

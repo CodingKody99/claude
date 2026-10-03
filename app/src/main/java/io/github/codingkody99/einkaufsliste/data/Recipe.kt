@@ -23,6 +23,9 @@ data class Recipe(
     /** One ingredient per line, exactly as written or dictated. */
     @ColumnInfo(name = "ingredients_text")
     val ingredientsText: String,
+    /** How it is made. Free text, because every recipe writes this differently. */
+    @ColumnInfo(name = "steps", defaultValue = "''")
+    val steps: String = "",
     @ColumnInfo(name = "created_at")
     val createdAt: Long = 0L,
 ) {
