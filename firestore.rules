@@ -1,0 +1,58 @@
+rules_version = '2';
+
+// Regeln für die gemeinsamen Listen.
+//
+// Zum Hintergrund: es gibt keine Konten und keine Passwörter — wer den
+// Haushalts-Code kennt, ist im Haushalt. Das ist eine bewusste Abwägung
+// (eine Einkaufsliste ist keine Bank), hat aber zwei Konsequenzen, die
+// diese Regeln abdecken müssen.
+//
+// Erstens: der Code darf nicht durchprobierbar sein. Zwölf Zeichen aus
+// einem Alphabet von 31 ergeben rund 59 Bit — einen einzelnen Code
+// abzufragen ist aussichtslos. Die Codes der Reihe nach *auflisten* wäre
+// dagegen trivial. Deshalb steht beim Haushalt `get` und nicht `read`:
+// `read` schließt `list` mit ein.
+//
+// Darum sind die Unterpfade auch einzeln ausgeschrieben statt mit `{**}`
+// abgekürzt: ein rekursiver Platzhalter passt in rules_version 2 auch auf
+// *keinen* Pfadteil, würde also den Haushalt selbst mittreffen und das
+// `list`-Verbot von oben wieder aufheben. Regeln addieren sich — eine
+// spätere Erlaubnis lässt sich nicht durch ein früheres Verbot einfangen.
+//
+// Zweitens: ohne jede Anmeldung könnte jeder im Internet Anfragen stellen.
+// Deshalb anonyme Anmeldung — sie kostet den Nutzer keinen Klick, hält
+// aber Fremdverkehr draußen. Sie ersetzt den Code nicht, sie kommt dazu.
+//
+// Was hier nicht steht, ist verboten: Firestore erlaubt nichts von sich aus.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /households/{household} {
+
+      // Einzeln abfragen und anlegen: ja. Auflisten: bewusst nicht.
+      allow get, create, update: if isSignedIn();
+
+      match /lists/{list} {
+        allow read, write: if isSignedIn();
+
+        match /items/{item} {
+          allow read, write: if isSignedIn();
+        }
+      }
+
+      match /recipes/{recipe} {
+        allow read, write: if isSignedIn();
+      }
+
+      // Die gelernten Kategorie-Korrekturen.
+      match /overrides/{nameKey} {
+        allow read, write: if isSignedIn();
+      }
+    }
+  }
+}

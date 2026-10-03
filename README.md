@@ -127,6 +127,34 @@ Listen. Für eine Einkaufsliste ist das die richtige Abwägung gegen den Aufwand
 Konten und Passwörtern — deshalb wird der Code auch nur innerhalb des Haushalts
 gezeigt.
 
+Die Regeln, die das absichern, liegen schon im Repository: `firestore.rules`. Sie
+erlauben den Zugriff auf einen Haushalt nur über seinen Code und verbieten
+ausdrücklich, die Haushalte *aufzulisten* — sonst wäre der Code in Minuten
+durchprobiert.
+
+### Was das Firebase-Projekt braucht
+
+Einmalig, im Browser unter <https://console.firebase.google.com>. Die Zugangsdaten
+können nicht im Repository liegen, deshalb geht das nicht von hier aus:
+
+1. **Projekt anlegen**, z. B. `einkaufsliste`. Google Analytics kann aus bleiben.
+2. **Firestore Database** → *Datenbank erstellen* → Region `eur3 (europe-west)`
+   → *im Produktionsmodus starten*. Danach unter *Regeln* den Inhalt von
+   `firestore.rules` einsetzen und veröffentlichen.
+3. **Authentication** → *Anmeldemethode* → **Anonym** aktivieren. Das ist keine
+   Anmeldung, die man als Nutzer merkt; sie hält nur Fremde von der Datenbank weg.
+4. **Android-App hinzufügen** mit dem Paketnamen
+   `io.github.codingkody99.einkaufsliste` → `google-services.json` herunterladen.
+5. **Web-App hinzufügen** (das `</>`-Symbol) → den `firebaseConfig`-Block kopieren.
+
+Die Datenmengen einer Einkaufsliste liegen weit innerhalb des kostenlosen
+Kontingents; ein Bezahlplan ist dafür nicht nötig.
+
+Zur Offenheit: `google-services.json` und der Web-`firebaseConfig` enthalten keine
+Passwörter, sondern Kennungen des Projekts — sie liegen üblicherweise mit im
+Repository. Dass dieses hier öffentlich ist, heißt also nicht, dass jemand an die
+Listen kommt; dafür sorgen die Regeln oben und der Haushalts-Code.
+
 ## APK aufs Pixel bekommen
 
 Es gibt zwei Wege — der erste braucht keine Entwicklungsumgebung.
