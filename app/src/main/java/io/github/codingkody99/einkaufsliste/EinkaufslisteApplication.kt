@@ -17,6 +17,7 @@ class EinkaufslisteApplication : Application() {
             dao = database.shoppingDao(),
             overrideDao = database.categoryOverrideDao(),
             listDao = database.shoppingListDao(),
+            recipeDao = database.recipeDao(),
         )
     }
 }
