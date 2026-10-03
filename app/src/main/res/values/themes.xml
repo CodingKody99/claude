@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Only styles the window until Compose takes over; the real palette comes
+      from EinkaufslisteTheme. A platform parent keeps AppCompat out of the
+      dependency list, and Theme.Material.Light exists all the way down to the
+      minSdk of 26 (unlike Theme.Material.DayNight, which is API 29+).
+    -->
+    <style name="Theme.Einkaufsliste" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+    </style>
+</resources>
