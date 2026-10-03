@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -94,7 +95,18 @@ fun ItemEditorSheet(
 
             Spacer(Modifier.height(20.dp))
 
-            Text(text = "Kategorie", style = MaterialTheme.typography.titleSmall)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Kategorie",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = categoryHint(state),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(8.dp))
 
             FlowRow(
@@ -118,11 +130,8 @@ fun ItemEditorSheet(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) { Text("Abbrechen") }
-                Button(
-                    onClick = onSave,
-                    enabled = state.canSave,
-                    modifier = Modifier.padding(start = 8.dp),
-                ) {
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = onSave, enabled = state.canSave) {
                     Text(if (state.isEditing) "Speichern" else "Hinzufügen")
                 }
             }
@@ -130,6 +139,14 @@ fun ItemEditorSheet(
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+/** Tells the user whether the section was detected, guessed, or chosen by them. */
+private fun categoryHint(state: EditorState): String = when {
+    state.name.isBlank() -> ""
+    state.teachesSomething -> "wird für „${state.name.trim()}“ gemerkt"
+    state.recognized -> "automatisch erkannt"
+    else -> "nicht erkannt — bitte wählen"
 }
 
 private const val FOCUS_DELAY_MILLIS = 180L

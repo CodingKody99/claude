@@ -1,5 +1,6 @@
 package io.github.codingkody99.einkaufsliste.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,11 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
@@ -66,10 +69,11 @@ fun ShoppingListRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val editor by viewModel.editor.collectAsStateWithLifecycle()
+    val importState by viewModel.import.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    UndoSnackbarEffect(
-        messages = viewModel.undoMessages,
+    NoticeSnackbarEffect(
+        notices = viewModel.notices,
         snackbarHostState = snackbarHostState,
         onUndo = viewModel::undo,
     )
@@ -77,6 +81,7 @@ fun ShoppingListRoute(
     ShoppingListScreen(
         uiState = uiState,
         snackbarHostState = snackbarHostState,
+        onPasteClick = viewModel::openImport,
         onAddClick = viewModel::openAddEditor,
         onItemClick = viewModel::openEditEditor,
         onToggle = viewModel::toggleChecked,
@@ -95,6 +100,19 @@ fun ShoppingListRoute(
             onDismiss = viewModel::dismissEditor,
         )
     }
+
+    if (importState.visible) {
+        ImportSheet(
+            state = importState,
+            onTextChange = viewModel::onImportTextChange,
+            onAnalyze = viewModel::analyzeImport,
+            onToggleRow = viewModel::toggleImportRow,
+            onRowCategoryChange = viewModel::setImportRowCategory,
+            onSelectAll = viewModel::setAllImportRowsSelected,
+            onApply = viewModel::applyImport,
+            onDismiss = viewModel::dismissImport,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +120,7 @@ fun ShoppingListRoute(
 fun ShoppingListScreen(
     uiState: ShoppingListUiState,
     snackbarHostState: SnackbarHostState,
+    onPasteClick: () -> Unit,
     onAddClick: () -> Unit,
     onItemClick: (ShoppingItem) -> Unit,
     onToggle: (ShoppingItem) -> Unit,
@@ -145,37 +164,46 @@ fun ShoppingListScreen(
             )
         },
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            if (uiState.showEmptyState) {
-                EmptyState(modifier = Modifier.fillMaxSize())
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    // Leaves room for the FAB so the last row stays reachable.
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                ) {
-                    items(items = uiState.rows, key = { it.key }) { row ->
-                        when (row) {
-                            is ShoppingListRow.CategoryHeader -> SectionHeader(
-                                title = "${row.category.emoji}  ${row.category.label}",
-                                trailing = row.openCount.toString(),
-                            )
+            PasteField(onClick = onPasteClick)
 
-                            is ShoppingListRow.DoneHeader -> SectionHeader(
-                                title = "✓  Erledigt",
-                                trailing = row.count.toString(),
-                            )
+            // weight, not fillMaxSize: the paste field above already took height.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                if (uiState.showEmptyState) {
+                    EmptyState(modifier = Modifier.fillMaxSize())
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        // Leaves room for the FAB so the last row stays reachable.
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                    ) {
+                        items(items = uiState.rows, key = { it.key }) { row ->
+                            when (row) {
+                                is ShoppingListRow.CategoryHeader -> SectionHeader(
+                                    title = "${row.category.emoji}  ${row.category.label}",
+                                    trailing = row.openCount.toString(),
+                                )
 
-                            is ShoppingListRow.Entry -> ItemRow(
-                                item = row.item,
-                                onClick = { onItemClick(row.item) },
-                                onToggle = { onToggle(row.item) },
-                                onDelete = { onDelete(row.item) },
-                            )
+                                is ShoppingListRow.DoneHeader -> SectionHeader(
+                                    title = "✓  Erledigt",
+                                    trailing = row.count.toString(),
+                                )
+
+                                is ShoppingListRow.Entry -> ItemRow(
+                                    item = row.item,
+                                    onClick = { onItemClick(row.item) },
+                                    onToggle = { onToggle(row.item) },
+                                    onDelete = { onDelete(row.item) },
+                                )
+                            }
                         }
                     }
                 }
@@ -200,6 +228,46 @@ fun ShoppingListScreen(
                 TextButton(onClick = { confirmClearAll = false }) { Text("Abbrechen") }
             },
         )
+    }
+}
+
+/**
+ * The entry point for pasting a whole list. Looks like a text field and opens
+ * the import sheet, where there is room for a real multi-line editor.
+ */
+@Composable
+private fun PasteField(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.List,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Ganze Liste einfügen",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "wird erkannt und nach Supermarkt sortiert",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -336,13 +404,10 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(16.dp))
-        Text(
-            text = "Liste ist leer",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text(text = "Liste ist leer", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Tippe auf „Hinzufügen“, um den ersten Artikel aufzunehmen.",
+            text = "Oben eine ganze Liste einfügen, oder unten einzelne Artikel hinzufügen.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -350,20 +415,20 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun UndoSnackbarEffect(
-    messages: SharedFlow<UndoMessage>,
+private fun NoticeSnackbarEffect(
+    notices: SharedFlow<Notice>,
     snackbarHostState: SnackbarHostState,
-    onUndo: (UndoMessage) -> Unit,
+    onUndo: (Notice) -> Unit,
 ) {
-    LaunchedEffect(messages, snackbarHostState) {
-        messages.collect { message ->
+    LaunchedEffect(notices, snackbarHostState) {
+        notices.collect { notice ->
             val result = snackbarHostState.showSnackbar(
-                message = message.text,
-                actionLabel = "Rückgängig",
+                message = notice.text,
+                actionLabel = if (notice.canUndo) "Rückgängig" else null,
                 withDismissAction = true,
                 duration = SnackbarDuration.Short,
             )
-            if (result == SnackbarResult.ActionPerformed) onUndo(message)
+            if (result == SnackbarResult.ActionPerformed) onUndo(notice)
         }
     }
 }
@@ -374,18 +439,20 @@ private fun ShoppingListScreenPreview() {
     val items = listOf(
         ShoppingItem(id = 1, name = "Tomaten", quantity = "500 g", category = Category.OBST_GEMUESE),
         ShoppingItem(id = 2, name = "Vollkornbrot", category = Category.BACKWAREN),
-        ShoppingItem(id = 3, name = "Milch", quantity = "2 l", category = Category.MOLKEREI),
-        ShoppingItem(id = 4, name = "Spülmittel", category = Category.HAUSHALT, isChecked = true),
+        ShoppingItem(id = 3, name = "Feta", category = Category.MOLKEREI),
+        ShoppingItem(id = 4, name = "Hackfleisch", quantity = "500 g", category = Category.FLEISCH_FISCH),
+        ShoppingItem(id = 5, name = "Spülmittel", category = Category.HAUSHALT, isChecked = true),
     )
     EinkaufslisteTheme(dynamicColor = false) {
         ShoppingListScreen(
             uiState = ShoppingListUiState(
                 rows = ShoppingListGrouper.group(items),
-                openCount = 3,
+                openCount = 4,
                 checkedCount = 1,
                 isLoading = false,
             ),
             snackbarHostState = remember { SnackbarHostState() },
+            onPasteClick = {},
             onAddClick = {},
             onItemClick = {},
             onToggle = {},

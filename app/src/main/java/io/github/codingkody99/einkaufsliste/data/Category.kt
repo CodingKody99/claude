@@ -1,18 +1,22 @@
 package io.github.codingkody99.einkaufsliste.data
 
 /**
- * Aisle-style grouping for the list. The declaration order doubles as the sort
- * order on screen, so it roughly follows the route through a supermarket.
+ * Aisle grouping for the list. The declaration order is the route through the
+ * supermarket and therefore the order sections appear on screen, so new
+ * categories must be inserted at the right position rather than appended.
+ *
+ * Values are persisted by [name], not by ordinal, so reordering is safe.
  */
 enum class Category(val label: String, val emoji: String) {
     OBST_GEMUESE("Obst & Gemüse", "🥕"),
     BACKWAREN("Backwaren", "🥖"),
-    MOLKEREI("Molkerei & Eier", "🧈"),
-    FLEISCH_FISCH("Fleisch & Fisch", "🐟"),
+    MOLKEREI("Molkerei & Kühlregal", "🧈"),
+    FLEISCH_FISCH("Fleisch, Wurst & Fisch", "🥩"),
     TIEFKUEHL("Tiefkühl", "🧊"),
-    VORRAT("Vorrat & Trocken", "🍝"),
+    VORRAT("Vorrat & Konserven", "🍝"),
+    SUESS_SNACKS("Süßes & Snacks", "🍫"),
     GETRAENKE("Getränke", "🧃"),
-    HAUSHALT("Haushalt", "🧽"),
+    HAUSHALT("Haushalt & Drogerie", "🧽"),
     SONSTIGES("Sonstiges", "🛒"),
     ;
 

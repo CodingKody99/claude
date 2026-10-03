@@ -1,23 +1,28 @@
 package io.github.codingkody99.einkaufsliste.data
 
+import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomShoppingRepositoryTest {
 
     private val dao = FakeShoppingDao()
+    private val overrideDao = FakeCategoryOverrideDao()
     private var clock = 1_000L
-    private val repository = RoomShoppingRepository(dao) { clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao) { clock }
 
     @Test
     fun `add stores the item unchecked and stamped with the current time`() = runTest {
         clock = 4_242L
-        repository.add("Tomaten", "500 g", Category.OBST_GEMUESE)
+        val id = repository.add(NewItem("Tomaten", "500 g", Category.OBST_GEMUESE))
 
         val stored = dao.items.single()
+        assertEquals(stored.id, id)
         assertEquals("Tomaten", stored.name)
         assertEquals("500 g", stored.quantity)
         assertEquals(Category.OBST_GEMUESE, stored.category)
@@ -27,7 +32,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `add trims surrounding whitespace`() = runTest {
-        repository.add("  Milch  ", "  2 l  ", Category.MOLKEREI)
+        repository.add(NewItem("  Milch  ", "  2 l  ", Category.MOLKEREI))
 
         val stored = dao.items.single()
         assertEquals("Milch", stored.name)
@@ -35,17 +40,39 @@ class RoomShoppingRepositoryTest {
     }
 
     @Test
-    fun `add ignores a blank name`() = runTest {
-        repository.add("   ", "1", Category.SONSTIGES)
-        repository.add("", "", Category.SONSTIGES)
-
+    fun `add ignores a blank name and reports no id`() = runTest {
+        assertNull(repository.add(NewItem("   ", "1")))
+        assertNull(repository.add(NewItem("")))
         assertTrue(dao.items.isEmpty())
     }
 
     @Test
+    fun `addAll keeps the given order and returns every new id`() = runTest {
+        val ids = repository.addAll(
+            listOf(
+                NewItem("Tomaten", category = Category.OBST_GEMUESE),
+                NewItem("Milch", category = Category.MOLKEREI),
+                NewItem("Brot", category = Category.BACKWAREN),
+            ),
+        )
+
+        assertEquals(3, ids.size)
+        assertEquals(listOf("Tomaten", "Milch", "Brot"), dao.items.map { it.name })
+        assertEquals(dao.items.map { it.id }, ids)
+    }
+
+    @Test
+    fun `addAll skips blank names without losing the other ids`() = runTest {
+        val ids = repository.addAll(listOf(NewItem("Milch"), NewItem("  "), NewItem("Brot")))
+
+        assertEquals(2, ids.size)
+        assertEquals(listOf("Milch", "Brot"), dao.items.map { it.name })
+    }
+
+    @Test
     fun `setChecked toggles only the targeted item`() = runTest {
-        repository.add("Brot", "", Category.BACKWAREN)
-        repository.add("Milch", "", Category.MOLKEREI)
+        repository.add(NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(NewItem("Milch", category = Category.MOLKEREI))
         val (brot, milch) = dao.items
 
         repository.setChecked(brot.id, true)
@@ -55,11 +82,11 @@ class RoomShoppingRepositoryTest {
     }
 
     @Test
-    fun `rename keeps id and created time but updates the rest`() = runTest {
-        repository.add("Brot", "1", Category.BACKWAREN)
+    fun `update keeps id and created time but replaces the rest`() = runTest {
+        repository.add(NewItem("Brot", "1", Category.BACKWAREN))
         val original = dao.items.single()
 
-        repository.rename(original, "  Vollkornbrot ", " 2 Stück ", Category.VORRAT)
+        repository.update(original, "  Vollkornbrot ", " 2 Stück ", Category.VORRAT)
 
         val updated = dao.items.single()
         assertEquals(original.id, updated.id)
@@ -70,19 +97,19 @@ class RoomShoppingRepositoryTest {
     }
 
     @Test
-    fun `rename ignores a blank name instead of wiping the item`() = runTest {
-        repository.add("Brot", "", Category.BACKWAREN)
+    fun `update ignores a blank name instead of wiping the item`() = runTest {
+        repository.add(NewItem("Brot", category = Category.BACKWAREN))
         val original = dao.items.single()
 
-        repository.rename(original, "   ", "", Category.SONSTIGES)
+        repository.update(original, "   ", "", Category.SONSTIGES)
 
         assertEquals(original, dao.items.single())
     }
 
     @Test
     fun `deleteChecked removes only checked items`() = runTest {
-        repository.add("Brot", "", Category.BACKWAREN)
-        repository.add("Milch", "", Category.MOLKEREI)
+        repository.add(NewItem("Brot", category = Category.BACKWAREN))
+        repository.add(NewItem("Milch", category = Category.MOLKEREI))
         repository.setChecked(dao.items.first().id, true)
 
         repository.deleteChecked()
@@ -92,7 +119,7 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `restore brings items back under fresh ids and keeps their state`() = runTest {
-        repository.add("Brot", "1 Stück", Category.BACKWAREN)
+        repository.add(NewItem("Brot", "1 Stück", Category.BACKWAREN))
         val original = dao.items.single()
         repository.setChecked(original.id, true)
         val deleted = dao.items.single()
@@ -111,11 +138,46 @@ class RoomShoppingRepositoryTest {
 
     @Test
     fun `deleteAll empties the list`() = runTest {
-        repository.add("Brot", "", Category.BACKWAREN)
-        repository.add("Milch", "", Category.MOLKEREI)
+        repository.add(NewItem("Brot"))
+        repository.add(NewItem("Milch"))
 
         repository.deleteAll()
 
         assertTrue(dao.items.isEmpty())
+    }
+
+    @Test
+    fun `a remembered category is keyed by the normalized name`() = runTest {
+        repository.rememberCategory("  Räucher-Tofu ", Category.MOLKEREI)
+
+        assertEquals(
+            mapOf(TextNormalizer.normalize("Räucher Tofu") to Category.MOLKEREI),
+            repository.observeOverrides().first(),
+        )
+    }
+
+    @Test
+    fun `remembering the same name twice replaces the category`() = runTest {
+        repository.rememberCategory("Yuzu", Category.OBST_GEMUESE)
+        repository.rememberCategory("Yuzu", Category.VORRAT)
+
+        assertEquals(1, overrideDao.rows.size)
+        assertEquals(Category.VORRAT, repository.observeOverrides().first().values.single())
+    }
+
+    @Test
+    fun `a blank name is never remembered`() = runTest {
+        repository.rememberCategory("   ", Category.VORRAT)
+        repository.rememberCategory("-", Category.VORRAT)
+
+        assertTrue(overrideDao.rows.isEmpty())
+    }
+
+    @Test
+    fun `forgetting removes the override again`() = runTest {
+        repository.rememberCategory("Yuzu", Category.OBST_GEMUESE)
+        repository.forgetCategory("yuzu")
+
+        assertTrue(repository.observeOverrides().first().isEmpty())
     }
 }

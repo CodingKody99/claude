@@ -6,16 +6,62 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
 
 ## Was die App kann
 
-- **Artikel erfassen** mit Name, optionaler Menge („500 g", „2 Packungen") und Kategorie
+- **Freitext einfügen**: oben auf „Ganze Liste einfügen" tippen, beliebigen Text
+  hineinwerfen — Stichpunktliste, Komma-Liste, Rezept nach Gerichten — und die App
+  zerlegt ihn in einzelne Artikel, erkennt Mengen und sortiert alles nach
+  Supermarkt-Reihenfolge. Vor dem Übernehmen gibt es eine **Vorschau**, in der jede
+  Zeile abgewählt oder umsortiert werden kann.
+- **Automatische Kategorisierung**: „Tomaten" landet in Obst & Gemüse, „Vollkornbrot"
+  in Backwaren, „TK-Spinat" im Tiefkühler. Ohne Netz, ohne Konto.
+- **Lernt mit**: jede Kategorie, die du von Hand korrigierst, gilt ab dann für
+  diesen Artikel — auch für Plural und andere Schreibweisen.
+- **Nach Supermarkt-Route gruppiert** (Obst & Gemüse → Backwaren → Molkerei →
+  Fleisch → Tiefkühl → Vorrat → Süßes → Getränke → Haushalt), damit die Liste dem
+  Weg durch den Laden folgt
 - **Abhaken** — erledigte Artikel rutschen durchgestrichen in einen eigenen Abschnitt
-- **Nach Supermarkt-Kategorien gruppiert** (Obst & Gemüse → Backwaren → Molkerei → …),
-  damit die Liste der Route durch den Laden folgt
 - **Bearbeiten** durch Antippen eines Eintrags
 - **Löschen** einzeln, „erledigte entfernen" oder Liste leeren — jeweils mit
-  **Rückgängig** direkt im Snackbar
+  **Rückgängig**; auch ein kompletter Import lässt sich in einem Zug zurücknehmen
 - **Material You**: übernimmt auf Android 12+ die Farben deines Hintergrundbilds,
   inklusive Dark Mode
 - **Alles lokal** in einer Room-Datenbank; keine Netzwerkberechtigung im Manifest
+
+### Wie aus Freitext eine sortierte Liste wird
+
+Eingefügt:
+
+```
+Salat mit Käse
+- 2 Tomaten
+- Feta
+- Olivenöl
+
+Abendessen Freitag: Lachs, Kartoffeln
+500g Hackfleisch
+```
+
+Ergebnis nach dem Übernehmen:
+
+| Abschnitt | Artikel |
+|---|---|
+| 🥕 Obst & Gemüse | Salat, 2 Tomaten, Kartoffeln |
+| 🧈 Molkerei & Kühlregal | Käse, Feta |
+| 🥩 Fleisch, Wurst & Fisch | Lachs, 500 g Hackfleisch |
+| 🍝 Vorrat & Konserven | Olivenöl |
+
+„Salat mit Käse" wird in zwei Artikel zerlegt, weil auf einer Einkaufsliste beides
+gebraucht wird — und beides in verschiedenen Gängen liegt. „Abendessen Freitag:"
+wird als Überschrift erkannt und nicht übernommen (in der Vorschau sichtbar, dort
+auch nachträglich einschaltbar).
+
+### Warum kein KI-Dienst für die Erkennung
+
+Die Kategorisierung läuft vollständig im Gerät: ein deutsches Lebensmittel-Lexikon
+plus Regeln für Komposita (`Hafermilch` → `milch`, `Vollkornbrot` → `brot`) und
+Tiefkühl-Marker (`TK-Spinat`). Ein Cloud-Dienst hätte bedeutet: ein API-Key in der
+APK, Kosten pro Nutzung und keine Funktion ohne Netz — ausgerechnet im Supermarkt.
+Was das Lexikon nicht kennt, landet sichtbar in „Sonstiges" und wird beim ersten
+Korrigieren gelernt.
 
 ## APK aufs Pixel bekommen
 
@@ -58,26 +104,35 @@ Dafür wird ein Android SDK mit API-Level 34 benötigt (`ANDROID_HOME` gesetzt o
 app/src/main/java/io/github/codingkody99/einkaufsliste/
 ├── EinkaufslisteApplication.kt   Datenbank + Repository als Singletons
 ├── MainActivity.kt               Einstiegspunkt, setzt Theme und Screen
-├── data/                         Room: Entity, DAO, Converter, Repository
-│   ├── Category.kt               Kategorien; Reihenfolge = Sortierung im UI
+├── data/                         Room
+│   ├── Category.kt               Kategorien; Reihenfolge = Route im Supermarkt
 │   ├── ShoppingItem.kt
-│   ├── ShoppingDao.kt
-│   ├── AppDatabase.kt
+│   ├── CategoryOverride.kt       gelernte Korrekturen
+│   ├── ShoppingDao.kt / CategoryOverrideDao.kt
+│   ├── AppDatabase.kt            v2, mit Migration für die Lerntabelle
 │   └── ShoppingRepository.kt     Interface + Room-Implementierung
-├── domain/
-│   ├── ShoppingListRow.kt        Kopfzeile oder Eintrag
-│   └── ShoppingListGrouper.kt    Gruppierung & Sortierung (reines Kotlin)
+├── domain/                       reines Kotlin, ohne Android und ohne Room
+│   ├── TextNormalizer.kt         Umlaute, Groß-/Kleinschreibung, Plural
+│   ├── FoodLexicon.kt            Lebensmittel-Vokabular je Kategorie
+│   ├── CategoryClassifier.kt     Zuordnung inkl. Kompositum- und TK-Regeln
+│   ├── QuantityParser.kt         „500g", „2x", „1/2", „Milch 1 l"
+│   ├── ShoppingListParser.kt     Freitext → Artikel
+│   ├── ShoppingListRow.kt
+│   └── ShoppingListGrouper.kt    Gruppierung & Sortierung
 └── ui/
     ├── ShoppingListUiState.kt
     ├── ShoppingListViewModel.kt
-    ├── ShoppingListScreen.kt
+    ├── ShoppingListViewModelFactory.kt
+    ├── ShoppingListScreen.kt     Liste + Freitextfeld oben
+    ├── ImportSheet.kt            Einfügen und Vorschau
     ├── ItemEditorSheet.kt
     └── theme/
 ```
 
-Die Sortier- und Gruppierlogik liegt bewusst in `domain/` und kennt weder Android
-noch Room — dadurch ist sie ohne Emulator testbar. Das `ShoppingRepository` ist ein
-Interface, sodass das ViewModel gegen einen In-Memory-Fake getestet wird.
+Alles, was Entscheidungen trifft — Normalisierung, Lexikon, Zuordnung, Mengen,
+Freitext-Zerlegung, Gruppierung — liegt in `domain/` und kennt weder Android noch
+Room. Dadurch ist es ohne Emulator testbar. `ShoppingRepository` ist ein Interface,
+das ViewModel wird gegen In-Memory-Fakes geprüft.
 
 ## Tests
 
@@ -87,9 +142,20 @@ Reine JVM-Unit-Tests, kein Emulator nötig:
 ./gradlew testDebugUnitTest
 ```
 
-Abgedeckt sind die Gruppierung und Sortierung der Liste, die Kategorie-Konvertierung
-für Room, das Repository (Trimmen, leere Eingaben, Wiederherstellen) und das
-ViewModel (Editor, Abhaken, Löschen mit Rückgängig).
+Abgedeckt sind unter anderem:
+
+- **Normalisierung**: Umlaute, Schreibweisen, deutsche Pluralformen
+- **Lexikon-Integrität**: kein Stichwort in zwei Kategorien, jedes Stichwort
+  klassifiziert zurück in seine eigene Kategorie
+- **Zuordnung**: Singular/Plural, Komposita (`Vollkornbrot`, `Hafermilch`),
+  Wortgruppen (`Frischkäse Kräuter` ist Molkerei, nicht Kräuter),
+  Tiefkühl-Marker, gelernte Korrekturen, und dass Unbekanntes *nicht* geraten wird
+- **Mengen**: vorne, hinten, Brüche, Einheiten, reine Zahlen ohne Artikel
+- **Freitext**: Stichpunkte, Nummerierung, Komma- und „und"/„mit"-Listen,
+  Überschriften, `Milch: 1 l` gegen `Abendessen: Lachs, Dill`, und eine komplette
+  Rezept-Liste am Stück
+- **Import-Ablauf**: Vorschau in Supermarkt-Reihenfolge, Duplikaterkennung,
+  Ab-/Anwählen, Umkategorisieren samt Lernen, Übernehmen und Rückgängig
 
 ## Technik
 
@@ -98,6 +164,6 @@ ViewModel (Editor, Abhaken, Löschen mit Rückgängig).
 | Sprache | Kotlin 2.0.21 |
 | UI | Jetpack Compose, Material 3 (Compose BOM 2024.09.00) |
 | Architektur | MVVM — ViewModel + `StateFlow`, Repository-Interface |
-| Persistenz | Room 2.6.1 (KSP) |
+| Persistenz | Room 2.6.1 (KSP), Schema v2 mit Migration |
 | Build | Gradle 8.9, Android Gradle Plugin 8.5.2, JDK 17 |
 | minSdk / targetSdk | 26 / 34 |

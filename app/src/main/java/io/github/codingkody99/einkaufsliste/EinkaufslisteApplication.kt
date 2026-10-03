@@ -12,6 +12,7 @@ import io.github.codingkody99.einkaufsliste.data.ShoppingRepository
 class EinkaufslisteApplication : Application() {
 
     val repository: ShoppingRepository by lazy {
-        RoomShoppingRepository(AppDatabase.get(this).shoppingDao())
+        val database = AppDatabase.get(this)
+        RoomShoppingRepository(database.shoppingDao(), database.categoryOverrideDao())
     }
 }
