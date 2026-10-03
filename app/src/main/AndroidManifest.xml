@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      Only used to load a recipe page the user pasted a link to. The app
+      contacts no other server: no analytics, no accounts, no sync.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".EinkaufslisteApplication"
         android:allowBackup="true"

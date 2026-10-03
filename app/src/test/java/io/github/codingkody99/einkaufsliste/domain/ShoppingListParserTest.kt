@@ -75,6 +75,41 @@ class ShoppingListParserTest {
     }
 
     @Test
+    fun `bracketed notes are dropped from the name`() {
+        assertEquals(listOf("Ei"), names("3 Ei(er)"))
+        assertEquals(listOf("Mehl"), names("250 g Mehl (Type 405)"))
+        assertEquals(listOf("Paprika"), names("Paprika [rot]"))
+        assertEquals("3", items("3 Ei(er)").single().quantity)
+    }
+
+    @Test
+    fun `vague amounts in front are dropped`() {
+        assertEquals(listOf("Butter"), names("etwas Butter"))
+        assertEquals(listOf("Öl"), names("evtl. etwas Öl"))
+        assertEquals(listOf("Zucker"), names("ca. Zucker"))
+    }
+
+    @Test
+    fun `what an ingredient is for is dropped`() {
+        assertEquals(listOf("Butter"), names("etwas Butter zum Braten"))
+        assertEquals(listOf("Öl"), names("Öl zum Frittieren"))
+        assertEquals(listOf("Mehl"), names("Mehl für den Teig"))
+        assertEquals(listOf("Salz"), names("Salz nach Geschmack"))
+    }
+
+    @Test
+    fun `a heading starting with a preposition is not truncated`() {
+        // "Für den Salat" is a caption, not an ingredient with a purpose.
+        assertEquals("Für den Salat", parser.parse("## Für den Salat").single().name)
+    }
+
+    @Test
+    fun `a line that is only filler disappears`() {
+        assertTrue(parser.parse("etwas").isEmpty())
+        assertTrue(parser.parse("(optional)").isEmpty())
+    }
+
+    @Test
     fun `every item is filed into its supermarket section`() {
         val parsed = items("Tomaten\nBrot\nMilch\nHackfleisch\nNudeln")
         assertEquals(

@@ -3,10 +3,14 @@ package io.github.codingkody99.einkaufsliste.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.codingkody99.einkaufsliste.data.Category
+import io.github.codingkody99.einkaufsliste.data.FetchResult
+import io.github.codingkody99.einkaufsliste.data.HttpRecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.NewItem
+import io.github.codingkody99.einkaufsliste.data.RecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
 import io.github.codingkody99.einkaufsliste.data.ShoppingRepository
 import io.github.codingkody99.einkaufsliste.domain.CategoryClassifier
+import io.github.codingkody99.einkaufsliste.domain.RecipeExtractor
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListGrouper
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListParser
 import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
@@ -26,6 +30,8 @@ class ShoppingListViewModel(
     private val repository: ShoppingRepository,
     private val classifier: CategoryClassifier = CategoryClassifier(),
     private val parser: ShoppingListParser = ShoppingListParser(classifier),
+    private val recipeFetcher: RecipeFetcher = HttpRecipeFetcher(),
+    private val recipeExtractor: RecipeExtractor = RecipeExtractor(),
 ) : ViewModel() {
 
     val uiState: StateFlow<ShoppingListUiState> = repository.observeItems()
@@ -129,31 +135,80 @@ class ShoppingListViewModel(
 
     /** Any edit invalidates the preview so it can never be stale. */
     fun onImportTextChange(value: String) {
-        _import.value = _import.value.copy(text = value, rows = null)
+        _import.value = _import.value.copy(
+            text = value,
+            rows = null,
+            error = null,
+            sourceTitle = null,
+        )
     }
 
     fun analyzeImport() {
         val state = _import.value
         if (!state.canAnalyze) return
         viewModelScope.launch {
-            val existing = repository.observeItems().first()
-                .filterNot { it.isChecked }
-                .map { TextNormalizer.normalize(it.name) }
-                .toSet()
+            _import.update { it.copy(rows = buildRows(state.text), error = null, sourceTitle = null) }
+        }
+    }
 
-            val rows = parser.parse(state.text, overrides.value).mapIndexed { index, entry ->
-                val duplicate = TextNormalizer.normalize(entry.name) in existing
-                ImportRow(
-                    id = index,
-                    entry = entry,
-                    category = entry.category,
-                    // Captions and things already on the list start unchecked;
-                    // the user can still include them.
-                    selected = !entry.isHeading && !duplicate,
-                    duplicate = duplicate,
-                )
+    /**
+     * Loads the recipe behind the pasted link and treats its ingredient list
+     * exactly like pasted text, so amounts, categories, duplicates and the
+     * preview all work the same way.
+     */
+    fun loadRecipe() {
+        val url = _import.value.detectedUrl ?: return
+        if (_import.value.loading) return
+        _import.update { it.copy(loading = true, error = null, rows = null, sourceTitle = null) }
+
+        viewModelScope.launch {
+            when (val result = recipeFetcher.fetch(url)) {
+                is FetchResult.Failure ->
+                    _import.update { it.copy(loading = false, error = result.reason) }
+
+                is FetchResult.Success -> {
+                    val recipe = recipeExtractor.extract(result.html)
+                    if (recipe == null || recipe.ingredients.isEmpty()) {
+                        _import.update {
+                            it.copy(
+                                loading = false,
+                                error = "Auf dieser Seite wurden keine Zutaten gefunden. " +
+                                    "Du kannst die Zutatenliste stattdessen kopieren und hier einfügen.",
+                            )
+                        }
+                    } else {
+                        val rows = buildRows(recipe.ingredients.joinToString("\n"))
+                        _import.update {
+                            it.copy(
+                                loading = false,
+                                rows = rows,
+                                sourceTitle = recipe.title.takeIf { title -> title.isNotBlank() },
+                            )
+                        }
+                    }
+                }
             }
-            _import.update { it.copy(rows = rows) }
+        }
+    }
+
+    /** Parses text into preview rows, marking what is already on the list. */
+    private suspend fun buildRows(text: String): List<ImportRow> {
+        val existing = repository.observeItems().first()
+            .filterNot { it.isChecked }
+            .map { TextNormalizer.normalize(it.name) }
+            .toSet()
+
+        return parser.parse(text, overrides.value).mapIndexed { index, entry ->
+            val duplicate = TextNormalizer.normalize(entry.name) in existing
+            ImportRow(
+                id = index,
+                entry = entry,
+                category = entry.category,
+                // Captions and things already on the list start unchecked;
+                // the user can still include them.
+                selected = !entry.isHeading && !duplicate,
+                duplicate = duplicate,
+            )
         }
     }
 

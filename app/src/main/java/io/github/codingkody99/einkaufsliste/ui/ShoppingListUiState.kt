@@ -4,6 +4,7 @@ import io.github.codingkody99.einkaufsliste.data.Category
 import io.github.codingkody99.einkaufsliste.data.ShoppingItem
 import io.github.codingkody99.einkaufsliste.domain.ParsedEntry
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListRow
+import io.github.codingkody99.einkaufsliste.domain.UrlDetector
 
 data class ShoppingListUiState(
     val rows: List<ShoppingListRow> = emptyList(),
@@ -58,9 +59,25 @@ data class ImportState(
     val text: String = "",
     /** Null until the text has been analysed; any edit clears it again. */
     val rows: List<ImportRow>? = null,
+    /** A recipe page is being fetched. */
+    val loading: Boolean = false,
+    /** Why the last attempt failed, phrased for the user. */
+    val error: String? = null,
+    /** Name of the recipe the rows came from, when they came from a link. */
+    val sourceTitle: String? = null,
 ) {
     val analyzed: Boolean get() = rows != null
-    val canAnalyze: Boolean get() = text.isNotBlank()
+    val canAnalyze: Boolean get() = text.isNotBlank() && !loading
+
+    /** The link in the pasted text, if there is one. */
+    val detectedUrl: String? get() = UrlDetector.firstUrl(text)
+
+    /**
+     * True when the text is essentially just a link, so loading the recipe is
+     * the obvious action rather than parsing the text as a list.
+     */
+    val looksLikeOnlyUrl: Boolean
+        get() = detectedUrl != null && UrlDetector.withoutUrls(text).length <= MAX_TRAILING_TEXT
     val selectedRows: List<ImportRow> get() = rows?.filter { it.selected }.orEmpty()
     val canApply: Boolean get() = selectedRows.isNotEmpty()
 
@@ -72,6 +89,11 @@ data class ImportState(
             .sortedBy { (category, _) -> category.ordinal }
 
     val skippedRows: List<ImportRow> get() = rows?.filterNot { it.selected }.orEmpty()
+
+    private companion object {
+        /** A shared link usually carries the page title alongside it. */
+        const val MAX_TRAILING_TEXT = 120
+    }
 }
 
 /** What tapping "Rückgängig" on a notice should do. */

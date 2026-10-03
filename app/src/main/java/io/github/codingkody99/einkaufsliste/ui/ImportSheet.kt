@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +55,7 @@ fun ImportSheet(
     state: ImportState,
     onTextChange: (String) -> Unit,
     onAnalyze: () -> Unit,
+    onLoadRecipe: () -> Unit,
     onToggleRow: (Int) -> Unit,
     onRowCategoryChange: (Int, Category) -> Unit,
     onSelectAll: (Boolean) -> Unit,
@@ -75,8 +79,8 @@ fun ImportSheet(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Beliebigen Text einfügen — die Artikel werden erkannt, " +
-                    "einsortiert und in Supermarkt-Reihenfolge gebracht.",
+                text = "Text oder einen Rezept-Link einfügen — die Artikel werden " +
+                    "erkannt, einsortiert und in Supermarkt-Reihenfolge gebracht.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -84,10 +88,10 @@ fun ImportSheet(
 
             if (state.rows == null) {
                 TextStep(
-                    text = state.text,
-                    canAnalyze = state.canAnalyze,
+                    state = state,
                     onTextChange = onTextChange,
                     onAnalyze = onAnalyze,
+                    onLoadRecipe = onLoadRecipe,
                     onDismiss = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
@@ -110,40 +114,75 @@ fun ImportSheet(
 
 @Composable
 private fun TextStep(
-    text: String,
-    canAnalyze: Boolean,
+    state: ImportState,
     onTextChange: (String) -> Unit,
     onAnalyze: () -> Unit,
+    onLoadRecipe: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         OutlinedTextField(
-            value = text,
+            value = state.text,
             onValueChange = onTextChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            label = { Text("Text einfügen") },
+            label = { Text("Text oder Link einfügen") },
             placeholder = {
                 Text(
-                    text = "Salat mit Käse\n2 Tomaten\nFeta\nRucola\n\n" +
-                        "Abendessen Freitag: Lachs, Kartoffeln\n500g Hackfleisch",
+                    text = "https://www.chefkoch.de/rezepte/…\n\n" +
+                        "oder:\n" +
+                        "Salat mit Käse\n2 Tomaten\nFeta\n500g Hackfleisch",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             textStyle = MaterialTheme.typography.bodyMedium,
+            enabled = !state.loading,
         )
+
+        state.error?.let { message ->
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = onAnalyze, enabled = canAnalyze) { Text("Analysieren") }
+        if (state.loading) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(12.dp))
+                Text("Rezept wird geladen …", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) { Text("Abbrechen") }
+                Spacer(Modifier.width(8.dp))
+
+                // A bare link wants loading; a list that merely mentions one
+                // wants parsing. Either way both actions stay reachable.
+                if (state.looksLikeOnlyUrl) {
+                    OutlinedButton(onClick = onAnalyze, enabled = state.canAnalyze) {
+                        Text("Als Text")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = onLoadRecipe) { Text("Rezept laden") }
+                } else {
+                    if (state.detectedUrl != null) {
+                        OutlinedButton(onClick = onLoadRecipe) { Text("Rezept laden") }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Button(onClick = onAnalyze, enabled = state.canAnalyze) { Text("Analysieren") }
+                }
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -163,6 +202,17 @@ private fun PreviewStep(
     val selected = state.selectedRows.size
 
     Column(modifier = modifier) {
+        state.sourceTitle?.let { title ->
+            Text(
+                text = "aus „$title“",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

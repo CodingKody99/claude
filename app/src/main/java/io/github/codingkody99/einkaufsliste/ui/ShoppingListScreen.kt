@@ -106,6 +106,7 @@ fun ShoppingListRoute(
             state = importState,
             onTextChange = viewModel::onImportTextChange,
             onAnalyze = viewModel::analyzeImport,
+            onLoadRecipe = viewModel::loadRecipe,
             onToggleRow = viewModel::toggleImportRow,
             onRowCategoryChange = viewModel::setImportRowCategory,
             onSelectAll = viewModel::setAllImportRowsSelected,

@@ -11,6 +11,10 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   zerlegt ihn in einzelne Artikel, erkennt Mengen und sortiert alles nach
   Supermarkt-Reihenfolge. Vor dem Übernehmen gibt es eine **Vorschau**, in der jede
   Zeile abgewählt oder umsortiert werden kann.
+- **Rezept-Link einfügen**: statt Text einen Link zu einer Rezeptseite einwerfen —
+  die Zutatenliste wird geladen und läuft durch dieselbe Erkennung und dieselbe
+  Vorschau. Rezeptangaben wie „3 Ei(er)", „etwas Butter zum Braten" oder
+  „Mehl (Type 405)" werden dabei auf das reduziert, was man im Laden braucht.
 - **Automatische Kategorisierung**: „Tomaten" landet in Obst & Gemüse, „Vollkornbrot"
   in Backwaren, „TK-Spinat" im Tiefkühler. Ohne Netz, ohne Konto.
 - **Lernt mit**: jede Kategorie, die du von Hand korrigierst, gilt ab dann für
@@ -53,6 +57,23 @@ Ergebnis nach dem Übernehmen:
 gebraucht wird — und beides in verschiedenen Gängen liegt. „Abendessen Freitag:"
 wird als Überschrift erkannt und nicht übernommen (in der Vorschau sichtbar, dort
 auch nachträglich einschaltbar).
+
+### Wie aus einem Rezept-Link eine Einkaufsliste wird
+
+Rezeptseiten veröffentlichen ihre Rezepte als **schema.org-Daten** im Seitenquelltext
+(`recipeIngredient` in einem `application/ld+json`-Block) — das ist der Standard, der
+Googles Rezept-Ergebnisse speist, und deshalb liefert ihn praktisch jede große Seite.
+Die App liest genau diese Daten, statt die sichtbare Seite zu scrapen: maschinell
+gedacht, stabil, und unabhängig davon wie die Seite gestaltet ist. Als Rückfalloption
+werden auch `itemprop`-Microdata gelesen.
+
+Findet die App keine Rezeptdaten, sagt sie das klar und schlägt vor, die Zutaten
+stattdessen als Text einzufügen — statt stillschweigend eine leere Liste zu
+übernehmen.
+
+Die **Netzwerkberechtigung** wird ausschließlich dafür benutzt: die App ruft nur
+Seiten auf, deren Link du selbst eingefügt hast. Keine Analytics, keine Konten,
+keine Synchronisierung.
 
 ### Warum kein KI-Dienst für die Erkennung
 
@@ -111,12 +132,16 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── ShoppingDao.kt / CategoryOverrideDao.kt
 │   ├── AppDatabase.kt            v2, mit Migration für die Lerntabelle
 │   └── ShoppingRepository.kt     Interface + Room-Implementierung
+│   └── RecipeFetcher.kt          lädt eine Rezeptseite (nur HttpURLConnection)
 ├── domain/                       reines Kotlin, ohne Android und ohne Room
 │   ├── TextNormalizer.kt         Umlaute, Groß-/Kleinschreibung, Plural
 │   ├── FoodLexicon.kt            Lebensmittel-Vokabular je Kategorie
 │   ├── CategoryClassifier.kt     Zuordnung inkl. Kompositum- und TK-Regeln
 │   ├── QuantityParser.kt         „500g", „2x", „1/2", „Milch 1 l"
 │   ├── ShoppingListParser.kt     Freitext → Artikel
+│   ├── UrlDetector.kt            findet einen Link im eingefügten Text
+│   ├── HtmlText.kt               HTML-Entities und Tags
+│   ├── RecipeExtractor.kt        schema.org-Zutaten aus einer Seite
 │   ├── ShoppingListRow.kt
 │   └── ShoppingListGrouper.kt    Gruppierung & Sortierung
 └── ui/
@@ -156,6 +181,10 @@ Abgedeckt sind unter anderem:
   Rezept-Liste am Stück
 - **Import-Ablauf**: Vorschau in Supermarkt-Reihenfolge, Duplikaterkennung,
   Ab-/Anwählen, Umkategorisieren samt Lernen, Übernehmen und Rückgängig
+- **Rezept-Links**: Linkerkennung im eingefügten Text, Zutaten aus JSON-LD
+  (auch verschachtelt in `@graph`, `@type` als Liste, Zutat als einzelner String),
+  Microdata-Rückfall, defektes JSON, Seite ohne Rezept, Ladefehler — und ein
+  komplettes Pfannkuchen-Rezept von der Seite bis zur sortierten Liste
 
 ## Technik
 
@@ -165,5 +194,7 @@ Abgedeckt sind unter anderem:
 | UI | Jetpack Compose, Material 3 (Compose BOM 2024.09.00) |
 | Architektur | MVVM — ViewModel + `StateFlow`, Repository-Interface |
 | Persistenz | Room 2.6.1 (KSP), Schema v2 mit Migration |
+| Netzwerk | `HttpURLConnection` (JDK), nur für eingefügte Rezept-Links |
+| JSON | kotlinx.serialization 1.7.3 (nur Laufzeit, kein Compiler-Plugin) |
 | Build | Gradle 8.9, Android Gradle Plugin 8.5.2, JDK 17 |
 | minSdk / targetSdk | 26 / 34 |

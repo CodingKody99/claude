@@ -139,10 +139,28 @@ class ShoppingListParser(
         }
     }
 
+    /**
+     * Turns an ingredient or list line into the name you want on a shopping
+     * list. Recipe wording carries three kinds of noise that are useless in a
+     * shop: bracketed notes ("Ei(er)", "Mehl (Type 405)"), vague amounts
+     * ("etwas", "evtl.") and what the ingredient is *for* ("zum Braten").
+     */
     private fun cleanName(input: String): String {
-        val collapsed = input.trim().trim(*TRIM_CHARS).replace(WHITESPACE, " ").trim()
+        var name = BRACKETS.replace(input, " ")
+        name = name.trim().trim(*TRIM_CHARS).replace(WHITESPACE, " ").trim()
+
+        // Repeated, because "evtl. etwas Butter" stacks them.
+        while (true) {
+            val stripped = VAGUE_PREFIX.replace(name, "").trim()
+            if (stripped == name) break
+            name = stripped
+        }
+
+        name = PURPOSE_SUFFIX.replace(name, "").trim()
+        name = name.trim(*TRIM_CHARS).trim()
+
         // "tomaten" -> "Tomaten"; names that already start upper case stay put.
-        return collapsed.replaceFirstChar { it.uppercaseChar() }
+        return name.replaceFirstChar { it.uppercaseChar() }
     }
 
     private fun splitFragments(body: String): List<String> =
@@ -155,6 +173,21 @@ class ShoppingListParser(
         val NUMBERING = Regex("^\\d{1,2}[.)]\\s+")
         val CHECKBOX = Regex("^(\\[[ xX]?]|☐|☑|✓|✔)\\s*")
         val WHITESPACE = Regex("\\s+")
+        val BRACKETS = Regex("\\([^)]*\\)|\\[[^]]*]")
+
+        /** Leading words that say "some" rather than how much. */
+        val VAGUE_PREFIX = Regex(
+            "^(?:etwas|etw\\.?|evtl\\.?|eventuell|ca\\.?|ggf\\.?|ein wenig|ein paar|" +
+                "nach belieben|nach geschmack|n\\.\\s*b\\.?)(?:\\s+|$)",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** Trailing phrases saying what the ingredient is for. */
+        val PURPOSE_SUFFIX = Regex(
+            "\\s+(?:zum|zur|fuer|fuers|für|fürs)\\s+.+$|" +
+                "\\s*,?\\s*(?:nach belieben|nach geschmack|n\\.\\s*b\\.?)$",
+            RegexOption.IGNORE_CASE,
+        )
         val TRIM_CHARS = charArrayOf(
             ' ', ',', ';', '.', '-', '–', ':', '!', '?', '*', '•', '%', '(', ')',
         )
