@@ -29,6 +29,21 @@ jobs:
       - name: Unit-Tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
+      - name: Testanzahl prüfen
+        run: |
+          dir=app/build/test-results/testDebugUnitTest
+          if [ ! -d "$dir" ]; then
+            echo "Keine Testergebnisse unter $dir gefunden."
+            exit 1
+          fi
+          sum() { grep -ho "$1=\"[0-9]\+\"" "$dir"/*.xml | grep -o '[0-9]\+' | awk '{s+=$1} END {print s+0}'; }
+          total=$(sum tests); failed=$(sum failures); errored=$(sum errors); skipped=$(sum skipped)
+          echo "$total Tests, $failed Fehler, $errored Errors, $skipped übersprungen"
+          if [ "$total" -eq 0 ]; then
+            echo "Es wurden 0 Tests ausgeführt — das ist kein grüner Lauf."
+            exit 1
+          fi
+
       - name: Debug-APK bauen
         run: ./gradlew --no-daemon assembleDebug
 
