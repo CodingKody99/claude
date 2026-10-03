@@ -9,8 +9,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ShoppingItem::class, CategoryOverride::class, ShoppingList::class, Recipe::class],
-    version = 5,
+    entities = [
+        ShoppingItem::class,
+        CategoryOverride::class,
+        ShoppingList::class,
+        Recipe::class,
+        SyncSettings::class,
+    ],
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -23,6 +29,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun shoppingListDao(): ShoppingListDao
 
     abstract fun recipeDao(): RecipeDao
+
+    abstract fun syncSettingsDao(): SyncSettingsDao
 
     companion object {
         private const val NAME = "einkaufsliste.db"
@@ -90,6 +98,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the row that says whether the lists are shared. */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_settings` (" +
+                        "`id` INTEGER NOT NULL, " +
+                        "`household_id` TEXT, " +
+                        "PRIMARY KEY(`id`))",
+                )
+            }
+        }
+
         /** A fresh install has no migration to seed the first list, so do it here. */
         private val seedFirstList = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -111,7 +131,13 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                    )
                     .addCallback(seedFirstList)
                     .build()
                     .also { instance = it }

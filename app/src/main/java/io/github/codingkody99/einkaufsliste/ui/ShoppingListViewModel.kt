@@ -52,6 +52,11 @@ class ShoppingListViewModel(
 
     init {
         viewModelScope.launch { _selectedListId.value = repository.ensureMainList() }
+        viewModelScope.launch {
+            repository.observeHousehold().collect { household ->
+                _sharing.update { it.copy(householdCode = household) }
+            }
+        }
     }
 
     val uiState: StateFlow<ShoppingListUiState> = _selectedListId
@@ -107,6 +112,9 @@ class ShoppingListViewModel(
     private val _recipeEditor = MutableStateFlow(RecipeEditorState())
     val recipeEditor: StateFlow<RecipeEditorState> = _recipeEditor.asStateFlow()
 
+    private val _sharing = MutableStateFlow(SharingState())
+    val sharing: StateFlow<SharingState> = _sharing.asStateFlow()
+
     private val _switcher = MutableStateFlow(SwitcherState())
     val switcher: StateFlow<SwitcherState> = _switcher.asStateFlow()
 
@@ -123,6 +131,46 @@ class ShoppingListViewModel(
     val notices: SharedFlow<Notice> = _notices
 
     private var noticeCounter = 0L
+
+    // --- sharing ---------------------------------------------------------------
+
+    fun openSharing() = _sharing.update { it.copy(visible = true, joinCode = "", joinFailed = false) }
+
+    fun dismissSharing() = _sharing.update {
+        it.copy(visible = false, joinCode = "", joinFailed = false)
+    }
+
+    fun onJoinCodeChange(value: String) = _sharing.update {
+        it.copy(joinCode = value, joinFailed = false)
+    }
+
+    fun startSharing() {
+        viewModelScope.launch {
+            val code = repository.startSharing()
+            emitNotice("Gemeinsame Nutzung gestartet", undo = null)
+            _sharing.update { it.copy(householdCode = code, joinFailed = false) }
+        }
+    }
+
+    fun joinSharing() {
+        val code = _sharing.value.joinCode
+        if (code.isBlank()) return
+        viewModelScope.launch {
+            if (repository.joinSharing(code)) {
+                emitNotice("Haushalt beigetreten", undo = null)
+                _sharing.update { it.copy(joinCode = "", joinFailed = false) }
+            } else {
+                _sharing.update { it.copy(joinFailed = true) }
+            }
+        }
+    }
+
+    fun stopSharing() {
+        viewModelScope.launch {
+            repository.stopSharing()
+            emitNotice("Die Listen bleiben wieder auf diesem Gerät", undo = null)
+        }
+    }
 
     // --- lists ----------------------------------------------------------------
 

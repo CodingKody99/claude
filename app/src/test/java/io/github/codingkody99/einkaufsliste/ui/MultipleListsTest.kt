@@ -5,6 +5,7 @@ import io.github.codingkody99.einkaufsliste.data.FakeCategoryOverrideDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingDao
 import io.github.codingkody99.einkaufsliste.data.FakeRecipeDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingListDao
+import io.github.codingkody99.einkaufsliste.data.FakeSyncSettingsDao
 import io.github.codingkody99.einkaufsliste.data.NewItem
 import io.github.codingkody99.einkaufsliste.data.RoomShoppingRepository
 import io.github.codingkody99.einkaufsliste.data.ShoppingList
@@ -37,8 +38,9 @@ class MultipleListsTest {
     private val overrideDao = FakeCategoryOverrideDao()
     private val listDao = FakeShoppingListDao()
     private val recipeDao = FakeRecipeDao()
+    private val syncDao = FakeSyncSettingsDao()
     private var clock = 0L
-    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao) { ++clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao, syncDao) { ++clock }
 
     private lateinit var viewModel: ShoppingListViewModel
 

@@ -87,6 +87,7 @@ fun ShoppingListRoute(
     val recipesVisible by viewModel.recipesVisible.collectAsStateWithLifecycle()
     val recipeEditor by viewModel.recipeEditor.collectAsStateWithLifecycle()
     val viewedRecipe by viewModel.viewedRecipe.collectAsStateWithLifecycle()
+    val sharing by viewModel.sharing.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     NoticeSnackbarEffect(
@@ -102,6 +103,7 @@ fun ShoppingListRoute(
         snackbarHostState = snackbarHostState,
         onTitleClick = viewModel::openSwitcher,
         onRecipesClick = viewModel::openRecipes,
+        onSharingClick = viewModel::openSharing,
         onPasteClick = viewModel::openImport,
         onQuickAddChange = viewModel::onQuickAddChange,
         onQuickAddSubmit = viewModel::submitQuickAdd,
@@ -195,6 +197,17 @@ fun ShoppingListRoute(
             onDismiss = viewModel::dismissRecipeEditor,
         )
     }
+
+    if (sharing.visible) {
+        SharingSheet(
+            state = sharing,
+            onJoinCodeChange = viewModel::onJoinCodeChange,
+            onStart = viewModel::startSharing,
+            onJoin = viewModel::joinSharing,
+            onStop = viewModel::stopSharing,
+            onDismiss = viewModel::dismissSharing,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -206,6 +219,7 @@ fun ShoppingListScreen(
     snackbarHostState: SnackbarHostState,
     onTitleClick: () -> Unit,
     onRecipesClick: () -> Unit,
+    onSharingClick: () -> Unit,
     onPasteClick: () -> Unit,
     onQuickAddChange: (String) -> Unit,
     onQuickAddSubmit: () -> Unit,
@@ -253,6 +267,7 @@ fun ShoppingListScreen(
                         totalCount = uiState.openCount + uiState.checkedCount,
                         onDeleteChecked = onDeleteChecked,
                         onClearRequest = { confirmClear = true },
+                        onSharingClick = onSharingClick,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -464,6 +479,7 @@ private fun ListMenu(
     totalCount: Int,
     onDeleteChecked: () -> Unit,
     onClearRequest: () -> Unit,
+    onSharingClick: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -485,6 +501,14 @@ private fun ListMenu(
             onClick = {
                 expanded = false
                 onClearRequest()
+            },
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Gemeinsam nutzen") },
+            onClick = {
+                expanded = false
+                onSharingClick()
             },
         )
     }
@@ -635,6 +659,7 @@ private fun ShoppingListScreenPreview() {
             snackbarHostState = remember { SnackbarHostState() },
             onTitleClick = {},
             onRecipesClick = {},
+            onSharingClick = {},
             onPasteClick = {},
             onQuickAddChange = {},
             onQuickAddSubmit = {},

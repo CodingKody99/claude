@@ -1,5 +1,6 @@
 package io.github.codingkody99.einkaufsliste.data
 
+import io.github.codingkody99.einkaufsliste.domain.HouseholdCode
 import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -56,6 +57,19 @@ interface ShoppingRepository {
 
     suspend fun clearList(listId: Long)
 
+    // --- sharing ---------------------------------------------------------------
+
+    /** The household these lists belong to, or null while they stay on the device. */
+    fun observeHousehold(): Flow<String?>
+
+    /** Starts a new household and returns its code. */
+    suspend fun startSharing(): String
+
+    /** Joins an existing household. Returns false when the code is malformed. */
+    suspend fun joinSharing(code: String): Boolean
+
+    suspend fun stopSharing()
+
     // --- recipes --------------------------------------------------------------
 
     fun observeRecipes(): Flow<List<Recipe>>
@@ -90,6 +104,7 @@ class RoomShoppingRepository(
     private val overrideDao: CategoryOverrideDao,
     private val listDao: ShoppingListDao,
     private val recipeDao: RecipeDao,
+    private val syncDao: SyncSettingsDao,
     private val now: () -> Long = System::currentTimeMillis,
 ) : ShoppingRepository {
 
@@ -180,6 +195,26 @@ class RoomShoppingRepository(
     override suspend fun deleteChecked(listId: Long) = dao.deleteChecked(listId)
 
     override suspend fun clearList(listId: Long) = dao.deleteByList(listId)
+
+    // --- sharing ---------------------------------------------------------------
+
+    override fun observeHousehold(): Flow<String?> = syncDao.observe().map { it?.householdId }
+
+    override suspend fun startSharing(): String {
+        val code = HouseholdCode.generate()
+        syncDao.put(SyncSettings(householdId = code))
+        return code
+    }
+
+    override suspend fun joinSharing(code: String): Boolean {
+        val normalized = HouseholdCode.normalize(code) ?: return false
+        syncDao.put(SyncSettings(householdId = normalized))
+        return true
+    }
+
+    override suspend fun stopSharing() {
+        syncDao.put(SyncSettings(householdId = null))
+    }
 
     // --- recipes --------------------------------------------------------------
 

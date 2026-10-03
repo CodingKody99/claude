@@ -15,8 +15,9 @@ class RoomShoppingRepositoryTest {
     private val overrideDao = FakeCategoryOverrideDao()
     private val listDao = FakeShoppingListDao()
     private val recipeDao = FakeRecipeDao()
+    private val syncDao = FakeSyncSettingsDao()
     private var clock = 1_000L
-    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao) { clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao, syncDao) { clock }
 
     private val listId = ShoppingList.DEFAULT_ID
 

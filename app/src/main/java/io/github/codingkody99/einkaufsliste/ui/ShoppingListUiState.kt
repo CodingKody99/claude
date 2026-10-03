@@ -17,6 +17,23 @@ data class ShoppingListUiState(
     val showEmptyState: Boolean get() = !isLoading && rows.isEmpty()
 }
 
+/**
+ * The "share with another phone" sheet.
+ *
+ * [householdCode] is both the invitation and the address of the shared data, so
+ * it is only ever shown to someone who is already in the household.
+ */
+data class SharingState(
+    val visible: Boolean = false,
+    val householdCode: String? = null,
+    /** What has been typed into the join field. */
+    val joinCode: String = "",
+    val joinFailed: Boolean = false,
+) {
+    val isShared: Boolean get() = !householdCode.isNullOrBlank()
+    val canJoin: Boolean get() = joinCode.isNotBlank()
+}
+
 /** One list in the switcher, with how full it is. */
 data class ListSummary(
     val list: ShoppingList,

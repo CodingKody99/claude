@@ -6,6 +6,7 @@ import io.github.codingkody99.einkaufsliste.data.FakeRecipeDao
 import io.github.codingkody99.einkaufsliste.data.FakeRecipeFetcher
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingDao
 import io.github.codingkody99.einkaufsliste.data.FakeShoppingListDao
+import io.github.codingkody99.einkaufsliste.data.FakeSyncSettingsDao
 import io.github.codingkody99.einkaufsliste.data.NewItem
 import io.github.codingkody99.einkaufsliste.data.Recipe
 import io.github.codingkody99.einkaufsliste.data.RoomShoppingRepository
@@ -39,8 +40,9 @@ class RecipeBookTest {
     private val overrideDao = FakeCategoryOverrideDao()
     private val listDao = FakeShoppingListDao()
     private val recipeDao = FakeRecipeDao()
+    private val syncDao = FakeSyncSettingsDao()
     private var clock = 0L
-    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao) { ++clock }
+    private val repository = RoomShoppingRepository(dao, overrideDao, listDao, recipeDao, syncDao) { ++clock }
     private val fetcher = FakeRecipeFetcher()
 
     private lateinit var viewModel: ShoppingListViewModel

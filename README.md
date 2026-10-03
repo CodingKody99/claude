@@ -45,6 +45,11 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
 - **Schnelleingabe unten**: das Feld ist immer da — antippen, Artikel eintippen,
   Enter. Die erkannte Kategorie steht darüber; ein Tipp darauf öffnet Menge und
   Kategorie
+- **Gemeinsam nutzen** (im Menü oben rechts): ein Gerät legt einen Haushalt an
+  und bekommt einen Code, das andere tritt mit diesem Code bei. Kein Konto, keine
+  E-Mail-Adresse — der Code ist der ganze Handschlag. Damit ist festgelegt, welche
+  Geräte zusammengehören; der Abgleich übers Internet kommt im nächsten Schritt
+  (siehe unten)
 - **Alles lokal** in einer Room-Datenbank
 
 ### Wie aus Freitext eine sortierte Liste wird
@@ -101,6 +106,27 @@ APK, Kosten pro Nutzung und keine Funktion ohne Netz — ausgerechnet im Superma
 Was das Lexikon nicht kennt, landet sichtbar in „Sonstiges" und wird beim ersten
 Korrigieren gelernt.
 
+### Stand beim gemeinsamen Nutzen
+
+Der Teil, der ohne Server funktioniert, ist fertig und getestet: der Haushalts-Code,
+wo er gespeichert wird (`sync_settings`), das Weitergeben und das Beitreten. Was
+noch fehlt, ist der Abgleich selbst — dafür braucht es ein Firebase-Projekt, dessen
+Zugangsdaten nicht im Repository liegen können. Geplant:
+
+1. **Firestore als zweite `ShoppingRepository`-Implementierung.** Das Interface
+   bleibt, wie es ist; die App entscheidet beim Start, ob sie gegen Room oder gegen
+   Firestore läuft. Firestore hält selbst eine Offline-Kopie, die Liste
+   funktioniert also weiter ohne Netz — wichtig im Supermarkt-Keller.
+2. **Web-App fürs iPhone**, die auf dieselben Firestore-Daten schaut: Liste sehen,
+   abhaken, ergänzen, Rezepte lesen und bearbeiten. Über „Zum Home-Bildschirm"
+   liegt sie wie eine App auf dem Homescreen — kein App Store, keine 99 €
+   Entwicklergebühr pro Jahr.
+
+Der Haushalts-Code ist dabei ein geteiltes Geheimnis: wer ihn kennt, kommt an die
+Listen. Für eine Einkaufsliste ist das die richtige Abwägung gegen den Aufwand von
+Konten und Passwörtern — deshalb wird der Code auch nur innerhalb des Haushalts
+gezeigt.
+
 ## APK aufs Pixel bekommen
 
 Es gibt zwei Wege — der erste braucht keine Entwicklungsumgebung.
@@ -148,8 +174,10 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── ShoppingList.kt           die Listen selbst
 │   ├── Recipe.kt                 gespeicherte Rezepte
 │   ├── CategoryOverride.kt       gelernte Korrekturen
+│   ├── SyncSettings.kt           zu welchem Haushalt dieses Gerät gehört
 │   ├── ShoppingDao.kt / ShoppingListDao.kt / RecipeDao.kt / CategoryOverrideDao.kt
-│   ├── AppDatabase.kt            v4, mit Migrationen für Lernen, Listen, Rezepte
+│   ├── SyncSettingsDao.kt
+│   ├── AppDatabase.kt            v6, mit Migrationen für Lernen, Listen, Rezepte, Teilen
 │   └── ShoppingRepository.kt     Interface + Room-Implementierung
 │   └── RecipeFetcher.kt          lädt eine Rezeptseite (nur HttpURLConnection)
 ├── domain/                       reines Kotlin, ohne Android und ohne Room
@@ -163,6 +191,7 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── HtmlText.kt               HTML-Entities und Tags
 │   ├── RecipeExtractor.kt        schema.org-Zutaten und -Ablauf aus einer Seite
 │   ├── RecipeTextSplitter.kt     Zutaten und Ablauf aus gescanntem Text trennen
+│   ├── HouseholdCode.kt          der Code, der zwei Handys zusammenschaltet
 │   ├── ShoppingListRow.kt
 │   └── ShoppingListGrouper.kt    Gruppierung & Sortierung
 └── ui/
@@ -171,6 +200,7 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
     ├── ShoppingListViewModelFactory.kt
     ├── ShoppingListScreen.kt     Liste, Einfügefeld oben, Schnelleingabe unten
     ├── ListSwitcherSheet.kt      Listen wechseln, anlegen, umbenennen
+    ├── SharingSheet.kt           Haushalt anlegen, Code weitergeben, beitreten
     ├── RecipesSheet.kt           gespeicherte Rezepte
     ├── RecipeEditorSheet.kt      Rezept eintippen, laden oder diktieren
     ├── RecipeViewSheet.kt        Rezept lesen
