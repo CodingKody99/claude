@@ -187,7 +187,7 @@ fun ShoppingListRoute(
             onIngredientsChange = viewModel::onRecipeIngredientsChange,
             onStepsChange = viewModel::onRecipeStepsChange,
             onDictated = viewModel::onRecipeDictated,
-            onIngredientsScanned = viewModel::onRecipeIngredientsScanned,
+            onScanned = viewModel::onRecipeScanned,
             onStepsScanned = viewModel::onRecipeStepsAppended,
             onLoadLink = viewModel::loadRecipeIntoEditor,
             onSave = viewModel::saveRecipe,

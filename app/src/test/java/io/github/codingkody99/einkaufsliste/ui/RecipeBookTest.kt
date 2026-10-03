@@ -48,7 +48,9 @@ class RecipeBookTest {
     private val pancakePage = """
         <html><head><script type="application/ld+json">
         {"@type":"Recipe","name":"Der perfekte Pfannkuchen",
-         "recipeIngredient":["250 g Mehl","3 Ei(er)","500 ml Milch","1 Prise Salz"]}
+         "recipeIngredient":["250 g Mehl","3 Ei(er)","500 ml Milch","1 Prise Salz"],
+         "recipeInstructions":[{"@type":"HowToStep","text":"Alles verrühren."},
+           {"@type":"HowToStep","text":"In der Pfanne ausbacken."}]}
         </script></head><body></body></html>
     """.trimIndent()
 
@@ -204,17 +206,46 @@ class RecipeBookTest {
     }
 
     @Test
-    fun `scanned text is appended to the ingredients line by line`() = runTest(dispatcher) {
+    fun `a scanned ingredient list is appended line by line`() = runTest(dispatcher) {
         advanceUntilIdle()
         viewModel.startCreateRecipe()
         viewModel.onRecipeIngredientsChange("Reisnudeln")
 
-        viewModel.onRecipeIngredientsScanned("  Karotte  \n\n  Gurke \n")
+        viewModel.onRecipeScanned("  Karotte  \n\n  Gurke \n")
 
         assertEquals(
             listOf("Reisnudeln", "Karotte", "Gurke"),
             viewModel.recipeEditor.value.ingredientsText.split('\n'),
         )
+        assertEquals("", viewModel.recipeEditor.value.steps)
+    }
+
+    @Test
+    fun `a scanned recipe card fills ingredients and method separately`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.startCreateRecipe()
+
+        viewModel.onRecipeScanned(
+            """
+            Zutaten für 2 Personen
+            Champignons
+            Kirschtomaten
+            Mozzarella
+            Durchschnittliche Nährwerte
+            481 kJ/115 kcal
+            Zubereitung
+            Champignons vierteln.
+            Kirschtomaten halbieren.
+            """.trimIndent(),
+        )
+
+        val editor = viewModel.recipeEditor.value
+        assertEquals(
+            listOf("Champignons", "Kirschtomaten", "Mozzarella"),
+            editor.ingredientsText.split('\n'),
+        )
+        assertEquals("Champignons vierteln.\nKirschtomaten halbieren.", editor.steps)
+        assertFalse("Nährwerte landen nirgends", (editor.ingredientsText + editor.steps).contains("kcal"))
     }
 
     @Test
@@ -232,7 +263,7 @@ class RecipeBookTest {
     fun `scanning nothing changes nothing`() = runTest(dispatcher) {
         advanceUntilIdle()
         viewModel.startCreateRecipe()
-        viewModel.onRecipeIngredientsScanned("   ")
+        viewModel.onRecipeScanned("   ")
         viewModel.onRecipeStepsAppended("")
 
         assertEquals("", viewModel.recipeEditor.value.ingredientsText)

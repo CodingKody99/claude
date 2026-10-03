@@ -13,6 +13,7 @@ import io.github.codingkody99.einkaufsliste.data.ShoppingList
 import io.github.codingkody99.einkaufsliste.data.ShoppingRepository
 import io.github.codingkody99.einkaufsliste.domain.CategoryClassifier
 import io.github.codingkody99.einkaufsliste.domain.RecipeExtractor
+import io.github.codingkody99.einkaufsliste.domain.RecipeTextSplitter
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListGrouper
 import io.github.codingkody99.einkaufsliste.domain.ShoppingListParser
 import io.github.codingkody99.einkaufsliste.domain.TextNormalizer
@@ -39,6 +40,7 @@ class ShoppingListViewModel(
     private val parser: ShoppingListParser = ShoppingListParser(classifier),
     private val recipeFetcher: RecipeFetcher = HttpRecipeFetcher(),
     private val recipeExtractor: RecipeExtractor = RecipeExtractor(),
+    private val recipeSplitter: RecipeTextSplitter = RecipeTextSplitter(classifier),
 ) : ViewModel() {
 
     /**
@@ -233,14 +235,27 @@ class ShoppingListViewModel(
     }
 
     /**
-     * Text from a photo lands in the ingredients field as it was read, line by
-     * line, so it can be corrected rather than retyped.
+     * A photographed recipe card carries the method, the equipment, the
+     * ingredients and the nutrition panel in one run of text, so it is split
+     * before it reaches the fields — otherwise the shopping list fills up with
+     * cooking steps and table debris.
      */
-    fun onRecipeIngredientsScanned(text: String) {
+    fun onRecipeScanned(text: String) {
         if (text.isBlank()) return
-        val lines = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-        _recipeEditor.update {
-            it.copy(ingredientsText = appendLines(it.ingredientsText, lines), error = null)
+        val split = recipeSplitter.split(text, overrides.value)
+        if (split.isEmpty) return
+        _recipeEditor.update { state ->
+            state.copy(
+                ingredientsText = appendLines(
+                    state.ingredientsText,
+                    split.ingredients.split('\n').filter { it.isNotBlank() },
+                ),
+                steps = appendLines(
+                    state.steps,
+                    split.steps.split('\n').filter { it.isNotBlank() },
+                ),
+                error = null,
+            )
         }
     }
 
@@ -293,6 +308,7 @@ class ShoppingListViewModel(
                                 loading = false,
                                 name = it.name.ifBlank { extracted.title },
                                 ingredientsText = extracted.ingredients.joinToString("\n"),
+                                steps = it.steps.ifBlank { extracted.instructions },
                                 sourceUrl = url,
                             )
                         }

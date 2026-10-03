@@ -192,6 +192,54 @@ class RecipeExtractorTest {
     }
 
     @Test
+    fun `the method is read alongside the ingredients`() {
+        val html = """
+            <script type="application/ld+json">
+            {"@type":"Recipe","name":"X","recipeIngredient":["1 Ei"],
+             "recipeInstructions":[{"@type":"HowToStep","text":"Ei aufschlagen."},
+               {"@type":"HowToStep","text":"Verrühren."}]}</script>
+        """.trimIndent()
+        assertEquals("Ei aufschlagen.\nVerrühren.", extractor.extract(html)!!.instructions)
+    }
+
+    @Test
+    fun `a method given as one paragraph is kept`() {
+        val html = """
+            <script type="application/ld+json">
+            {"@type":"Recipe","name":"X","recipeIngredient":["1 Ei"],
+             "recipeInstructions":"Alles verr&uuml;hren und ausbacken."}</script>
+        """.trimIndent()
+        assertEquals("Alles verrühren und ausbacken.", extractor.extract(html)!!.instructions)
+    }
+
+    @Test
+    fun `a method split into sections is flattened in order`() {
+        val html = """
+            <script type="application/ld+json">
+            {"@type":"Recipe","name":"X","recipeIngredient":["1 Ei"],
+             "recipeInstructions":[
+               {"@type":"HowToSection","name":"Teig","itemListElement":[
+                 {"@type":"HowToStep","text":"Mehl abwiegen."},
+                 {"@type":"HowToStep","text":"Ei dazu."}]},
+               {"@type":"HowToSection","name":"Backen","itemListElement":[
+                 {"@type":"HowToStep","text":"Ausbacken."}]}]}</script>
+        """.trimIndent()
+        assertEquals(
+            "Mehl abwiegen.\nEi dazu.\nAusbacken.",
+            extractor.extract(html)!!.instructions,
+        )
+    }
+
+    @Test
+    fun `a recipe without a method still imports`() {
+        val html = """
+            <script type="application/ld+json">
+            {"@type":"Recipe","name":"X","recipeIngredient":["1 Ei"]}</script>
+        """.trimIndent()
+        assertEquals("", extractor.extract(html)!!.instructions)
+    }
+
+    @Test
     fun `the extracted ingredients feed straight into the list parser`() {
         val recipe = extractor.extract(chefkochStylePage)!!
         val entries = ShoppingListParser().parse(recipe.ingredients.joinToString("\n"))

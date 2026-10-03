@@ -46,6 +46,7 @@ class RecipeExtractor {
             return ExtractedRecipe(
                 title = textOf(recipe["name"]) ?: textOf(recipe["headline"]).orEmpty(),
                 ingredients = ingredients,
+                instructions = instructionsOf(recipe["recipeInstructions"]),
                 servings = textOf(recipe["recipeYield"]).orEmpty(),
                 source = ExtractedRecipe.Source.JSON_LD,
             )
@@ -83,6 +84,27 @@ class RecipeExtractor {
         is JsonObject -> stringsOf(element["@value"]).ifEmpty { stringsOf(element["name"]) }
     }
 
+    /**
+     * `recipeInstructions` is a free-for-all: a paragraph, a list of strings, a
+     * list of HowToStep objects, or sections holding those. Collecting every
+     * text value in order handles all of them.
+     */
+    private fun instructionsOf(element: JsonElement?): String =
+        instructionTexts(element)
+            .map(HtmlText::toPlainText)
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+
+    private fun instructionTexts(element: JsonElement?): List<String> = when (element) {
+        null, JsonNull -> emptyList()
+        is JsonPrimitive -> listOf(element.content)
+        is JsonArray -> element.flatMap { instructionTexts(it) }
+        // A HowToSection holds its steps; a HowToStep holds its text.
+        is JsonObject ->
+            element["itemListElement"]?.let { instructionTexts(it) }
+                ?: stringsOf(element["text"]).ifEmpty { stringsOf(element["name"]) }
+    }
+
     private fun textOf(element: JsonElement?): String? =
         stringsOf(element).firstOrNull()?.let(HtmlText::toPlainText)?.takeIf { it.isNotEmpty() }
 
@@ -96,6 +118,9 @@ class RecipeExtractor {
         return ExtractedRecipe(
             title = microdataTitle(html),
             ingredients = ingredients,
+            instructions = cleanIngredients(
+                MICRODATA_INSTRUCTION.findAll(html).map { it.groupValues[2] }.toList(),
+            ).joinToString("\n"),
             servings = "",
             source = ExtractedRecipe.Source.MICRODATA,
         )
@@ -134,6 +159,12 @@ class RecipeExtractor {
             "<([a-z]+)[^>]*itemprop\\s*=\\s*[\"'](?:recipeIngredient|ingredients)[\"'][^>]*>(.*?)</\\1>",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
         )
+        /** Group 1 is the tag name, group 2 the step text. */
+        val MICRODATA_INSTRUCTION = Regex(
+            "<([a-z]+)[^>]*itemprop\\s*=\\s*[\"'](?:recipeInstructions|instructions)[\"'][^>]*>(.*?)</\\1>",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+
         val MICRODATA_NAME = Regex(
             "<[a-z]+[^>]*itemprop\\s*=\\s*[\"']name[\"'][^>]*>(.*?)</",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),

@@ -17,8 +17,9 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   Artikeln. Satzfüller fallen weg, und da Spracherkennung keine Kommas setzt,
   werden auch Wortketten ohne Satzzeichen in einzelne Artikel zerlegt
 - **Rezeptbuch** über das 🍳-Symbol oben: Rezepte eintippen, per Link laden,
-  diktieren oder **vom Foto scannen** — für Rezepte auf Papier. Dazu ein Feld für
-  den Ablauf. Ein Tipp auf ein Rezept öffnet es zum Lesen; von dort gehen die
+  diktieren oder **vom Foto scannen** — für Rezepte auf Papier. Zutaten und Ablauf
+  werden dabei getrennt: beim Foto über die Abschnitts-Überschriften, beim Link
+  über die schema.org-Daten der Seite. Ein Tipp auf ein Rezept öffnet es zum Lesen; von dort gehen die
   Zutaten über dieselbe Vorschau wie der Freitext-Import auf die aktuelle Liste
 - **Rezept-Link einfügen**: statt Text einen Link zu einer Rezeptseite einwerfen —
   die Zutatenliste wird geladen und läuft durch dieselbe Erkennung und dieselbe
@@ -158,7 +159,8 @@ app/src/main/java/io/github/codingkody99/einkaufsliste/
 │   ├── ItemSegmenter.kt          Wortketten ohne Satzzeichen trennen
 │   ├── UrlDetector.kt            findet einen Link im eingefügten Text
 │   ├── HtmlText.kt               HTML-Entities und Tags
-│   ├── RecipeExtractor.kt        schema.org-Zutaten aus einer Seite
+│   ├── RecipeExtractor.kt        schema.org-Zutaten und -Ablauf aus einer Seite
+│   ├── RecipeTextSplitter.kt     Zutaten und Ablauf aus gescanntem Text trennen
 │   ├── ShoppingListRow.kt
 │   └── ShoppingListGrouper.kt    Gruppierung & Sortierung
 └── ui/
@@ -216,6 +218,9 @@ Abgedeckt sind unter anderem:
 - **Wortketten ohne Satzzeichen**: „einen Tofu eine Gurke" wird getrennt,
   „Rote Bete" und „Brauner Zucker" nicht, und ein nachgestelltes „Milch 1 l"
   verliert seine Menge nicht
+- **Gescannte Rezeptkarte**: der echte Erkenner-Ausgabetext einer HelloFresh-Karte
+  als Testfall — aus 150 Zeilen werden 11 Zutaten, die Zubereitung landet im
+  Ablauf, die Nährwerttabelle nirgends
 - **Rezeptbuch**: Speichern, Bearbeiten, Löschen, Laden aus einem Link,
   Diktieren mit Name aus dem Gericht, Übernahme auf die Liste samt
   Duplikatprüfung — und dass ein Rezept bei jeder Nutzung neu eingeordnet wird,

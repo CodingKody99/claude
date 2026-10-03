@@ -40,7 +40,7 @@ fun RecipeEditorSheet(
     onIngredientsChange: (String) -> Unit,
     onStepsChange: (String) -> Unit,
     onDictated: (String) -> Unit,
-    onIngredientsScanned: (String) -> Unit,
+    onScanned: (String) -> Unit,
     onStepsScanned: (String) -> Unit,
     onLoadLink: () -> Unit,
     onSave: () -> Unit,
@@ -63,8 +63,8 @@ fun RecipeEditorSheet(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Eintippen, einen Rezept-Link einfügen, diktieren oder ein Foto " +
-                    "des Rezepts scannen.",
+                text = "Eintippen, einen Rezept-Link einfügen, diktieren oder ein Foto des " +
+                    "Rezepts scannen — Zutaten und Ablauf werden dabei getrennt.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -110,7 +110,7 @@ fun RecipeEditorSheet(
                         prompt = "Sag, was in das Rezept gehört",
                     )
                     Spacer(Modifier.width(8.dp))
-                    ScanPhotoButton(onText = onIngredientsScanned, label = "Foto")
+                    ScanPhotoButton(onText = onScanned, label = "Rezept-Foto")
                     if (state.detectedUrl != null) {
                         Spacer(Modifier.width(8.dp))
                         OutlinedButton(onClick = onLoadLink) { Text("Link") }
@@ -139,7 +139,7 @@ fun RecipeEditorSheet(
             Spacer(Modifier.height(8.dp))
 
             if (!state.loading) {
-                ScanPhotoButton(onText = onStepsScanned, label = "Ablauf vom Foto")
+                ScanPhotoButton(onText = onStepsScanned, label = "Nur Ablauf vom Foto")
             }
 
             state.error?.let { message ->
