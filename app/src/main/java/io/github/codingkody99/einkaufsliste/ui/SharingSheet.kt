@@ -153,6 +153,13 @@ fun SharingSheet(
                 style = MaterialTheme.typography.titleSmall,
             )
             Spacer(Modifier.height(8.dp))
+
+            val joinError: (@Composable () -> Unit)? = if (state.joinFailed) {
+                { Text("Dieser Code stimmt nicht – bitte nochmal prüfen.") }
+            } else {
+                null
+            }
+
             Row(verticalAlignment = Alignment.Top) {
                 OutlinedTextField(
                     value = state.joinCode,
@@ -161,11 +168,7 @@ fun SharingSheet(
                     isError = state.joinFailed,
                     label = { Text("Code") },
                     placeholder = { Text("ABCD-EFGH-JKMN") },
-                    supportingText = if (state.joinFailed) {
-                        { Text("Dieser Code stimmt nicht – bitte nochmal prüfen.") }
-                    } else {
-                        null
-                    },
+                    supportingText = joinError,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Characters,
                         keyboardType = KeyboardType.Ascii,
