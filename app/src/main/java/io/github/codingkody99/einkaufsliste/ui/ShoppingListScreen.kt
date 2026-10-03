@@ -156,6 +156,7 @@ fun ShoppingListRoute(
             onApply = viewModel::applyImport,
             onDismiss = viewModel::dismissImport,
             onDictated = viewModel::onImportDictated,
+            onScanned = viewModel::onImportScanned,
         )
     }
 

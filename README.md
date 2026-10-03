@@ -11,6 +11,8 @@ Kompatibilität mit Pixel-Geräten (Android 8.0 und neuer).
   zerlegt ihn in einzelne Artikel, erkennt Mengen und sortiert alles nach
   Supermarkt-Reihenfolge. Vor dem Übernehmen gibt es eine **Vorschau**, in der jede
   Zeile abgewählt oder umsortiert werden kann.
+- **Foto scannen** auch beim Einfügen in die Liste: ist das Foto eine Rezeptkarte,
+  wandern nur die Zutaten hinein, nicht die Zubereitung
 - **Diktieren**: statt zu tippen einfach sagen, was gebraucht wird — „Ich würde
   gerne Sommerrollen machen und brauche dafür Karotten, einen Tofu eine Gurke,
   Reispapier Reisnudeln" wird zum Gericht als Überschrift plus fünf einsortierten

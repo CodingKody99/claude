@@ -551,7 +551,26 @@ class RecipeBookTest {
         assertEquals("Yuzu", recipes().single().ingredientsText)
     }
 
-    // --- dictating into the shopping list -------------------------------------
+    @Test
+    fun `a dictated recipe without commas is split into ingredients`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.startCreateRecipe()
+
+        // Speech recognition writes no commas, so this arrives as one run.
+        viewModel.onRecipeDictated(
+            "ich würde gerne Sommerrollen machen und brauche dafür Reispapier " +
+                "Reisnudeln einen Tofu eine Gurke",
+        )
+
+        val editor = viewModel.recipeEditor.value
+        assertEquals("Sommerrollen", editor.name)
+        assertEquals(
+            listOf("Reispapier", "Reisnudeln", "Tofu", "Gurke"),
+            editor.ingredientsText.split('\n'),
+        )
+    }
+
+    // --- dictating and scanning into the shopping list -------------------------
 
     @Test
     fun `dictated text is appended to the import field`() = runTest(dispatcher) {
@@ -562,6 +581,47 @@ class RecipeBookTest {
         viewModel.onImportDictated("und Butter")
 
         assertEquals("Milch, Brot\nund Butter", viewModel.import.value.text)
+    }
+
+    @Test
+    fun `a photographed note goes into the import field as it is`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.openImport()
+
+        viewModel.onImportScanned("Milch\nBrot\nTomaten")
+
+        assertEquals("Milch\nBrot\nTomaten", viewModel.import.value.text)
+    }
+
+    @Test
+    fun `a photographed recipe card contributes only its ingredients`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.openImport()
+
+        viewModel.onImportScanned(
+            """
+            Zutaten für 2 Personen
+            Champignons
+            Kirschtomaten
+            Mozzarella
+            Zubereitung
+            Champignons vierteln.
+            Kirschtomaten halbieren.
+            """.trimIndent(),
+        )
+
+        assertEquals("Champignons\nKirschtomaten\nMozzarella", viewModel.import.value.text)
+    }
+
+    @Test
+    fun `scanning adds to what is already in the import field`() = runTest(dispatcher) {
+        advanceUntilIdle()
+        viewModel.openImport()
+        viewModel.onImportTextChange("Milch")
+
+        viewModel.onImportScanned("Brot\nButter")
+
+        assertEquals("Milch\nBrot\nButter", viewModel.import.value.text)
     }
 
     @Test

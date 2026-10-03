@@ -364,6 +364,24 @@ class ShoppingListViewModel(
         }
     }
 
+    /**
+     * A photo on the shopping list is usually a handwritten note, but sometimes
+     * it is a recipe card. When the splitter finds both parts, only the
+     * ingredients belong here — the cooking steps are not shopping.
+     */
+    fun onImportScanned(text: String) {
+        if (text.isBlank()) return
+        val split = recipeSplitter.split(text, overrides.value)
+        val wanted = if (split.ingredients.isNotBlank() && split.steps.isNotBlank()) {
+            split.ingredients
+        } else {
+            text.trim()
+        }
+        onImportTextChange(
+            appendLines(_import.value.text, wanted.split('\n').filter { it.isNotBlank() }),
+        )
+    }
+
     /** Dictated text is appended, so several bursts can be spoken in a row. */
     fun onImportDictated(spoken: String) {
         if (spoken.isBlank()) return
